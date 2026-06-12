@@ -6,6 +6,10 @@
   "plugins": {
     "StatusBar": {
       "overlaysWebView": true
+    },
+    "Keyboard": {
+      "resize": "body",
+      "resizeOnFullScreen": true
     }
   }
 }

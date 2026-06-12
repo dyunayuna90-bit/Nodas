@@ -13,11 +13,25 @@
         <div class="screen-glow"></div>
         <div id="boot-screen"></div>
         <div id="sys-msg-container"></div>
+        <div id="modal-overlay" class="modal-overlay">
+            <div class="modal-box">
+                <div class="modal-title" id="del-modal-title">// PURGE CONFIRMATION //</div>
+                <div class="modal-body" id="del-modal-body">This action will permanently erase this data sector. This cannot be undone.</div>
+                <div class="modal-instruction" id="del-modal-instruction">Type "ok" below to proceed:</div>
+                <input type="text" id="del-confirm-input" class="modal-input" placeholder="type ok..." autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+                <div class="modal-actions">
+                    <button class="btn primary" id="del-confirm-btn" onclick="app.confirmDelete()">[ EXECUTE ]</button>
+                    <button class="btn" id="del-cancel-btn" onclick="app.closeDeleteModal()">[ CANCEL ]</button>
+                </div>
+            </div>
+        </div>
 
+        <div class="notch-spacer"></div>
         <header class="sys-header" onclick="app.playTone('click')">
             <div class="title">NODAS_KERNEL <span id="mode-indicator">[LGT]</span></div>
             <div class="bits" id="bit-anim">01010101</div>
         </header>
+        <div class="header-rule"></div>
 
         <!-- VIEW: LIST (HOME) -->
         <main id="view-list" class="view">
@@ -75,7 +89,7 @@
 
             <div class="bottom-nav">
                 <button class="btn primary" id="btn-save" onclick="app.saveNote()">[ WRITE & EXIT ]</button>
-                <button class="btn" id="btn-abort" onclick="app.goBack()">[ ABORT ]</button>
+                <button class="btn" id="btn-abort" onclick="app.abortEdit()">[ ABORT ]</button>
             </div>
         </main>
 

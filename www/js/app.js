@@ -214,50 +214,141 @@ const app = {
     },
 
     // ─── KEYBOARD-AWARE SCROLLING ──────────────────────────────────────
-    // On native/WebView, the soft keyboard shrinks the visual viewport but
-    // the document doesn't reflow like a desktop browser, so a focused
-    // input/textarea near the bottom can end up hidden behind the keyboard.
-    // We listen for visualViewport resizes (keyboard open/close) and for
-    // focus events on editable fields, then scroll the focused element's
-    // view into a visible position — mirroring how a normal browser would
-    // auto-scroll to keep the caret visible.
+    // Inside the Capacitor APK (FLAG_LAYOUT_NO_LIMITS + no native resize),
+    // the WebView does NOT shrink when the soft keyboard opens, so
+    // visualViewport-based tricks alone don't fire correctly. We therefore
+    // rely on the @capacitor/keyboard plugin (configured with
+    // resize: 'body' in capacitor.config.json) which DOES resize the body
+    // and fires JS events with the keyboard height. We use that height to:
+    //  1. Push a spacer element of that height to the bottom of the
+    //     editor view, so content (and the bottom-nav) never sit under
+    //     the keyboard.
+    //  2. Keep the caret line of the focused textarea/input pinned just
+    //     above the keyboard at all times — on every keystroke, not only
+    //     on focus — using a mirrored-div technique to find the caret's
+    //     pixel position and scrolling it into view.
     setupKeyboardScroll() {
-        const scrollFocusedIntoView = () => {
+        this.keyboardHeight = 0;
+
+        // Spacer that grows to match the keyboard height, placed at the
+        // end of the editor view so scrollHeight increases and the caret
+        // can be scrolled fully above the keyboard.
+        const spacer = document.createElement('div');
+        spacer.id = 'kb-spacer';
+        spacer.style.flexShrink = '0';
+        spacer.style.height = '0px';
+        spacer.style.width = '100%';
+        document.getElementById('view-editor').appendChild(spacer);
+        this.kbSpacer = spacer;
+
+        const pinCaretAboveKeyboard = () => {
             const active = document.activeElement;
             if (!active) return;
             const tag = active.tagName;
             if (tag !== 'TEXTAREA' && tag !== 'INPUT') return;
 
-            // Use a small delay so layout has settled after the keyboard
-            // animation finishes.
-            setTimeout(() => {
-                active.scrollIntoView({ block: 'center', behavior: 'smooth' });
-
-                // Additionally, for the editor textarea, make sure the
-                // caret position itself stays visible by nudging the
-                // view's scrollTop based on cursor line.
+            requestAnimationFrame(() => {
                 if (active === this.els.editContent) {
-                    const view = document.getElementById('view-editor');
-                    if (view) {
-                        const rect = active.getBoundingClientRect();
-                        const viewportH = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-                        if (rect.bottom > viewportH) {
-                            view.scrollTop += (rect.bottom - viewportH) + 24;
-                        }
-                    }
+                    this.scrollCaretIntoView(active);
+                } else {
+                    active.scrollIntoView({ block: 'center' });
                 }
-            }, 80);
+            });
         };
 
+        const applyKeyboardHeight = (height) => {
+            this.keyboardHeight = height;
+            this.kbSpacer.style.height = height + 'px';
+            // Lift the fixed bottom-nav above the keyboard too.
+            document.querySelectorAll('.bottom-nav').forEach(nav => {
+                nav.style.transform = height > 0 ? `translateY(-${height}px)` : '';
+            });
+            pinCaretAboveKeyboard();
+        };
+
+        if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Keyboard) {
+            const Keyboard = window.Capacitor.Plugins.Keyboard;
+            Keyboard.addListener('keyboardWillShow', (info) => {
+                applyKeyboardHeight(info && info.keyboardHeight ? info.keyboardHeight : 0);
+            });
+            Keyboard.addListener('keyboardDidShow', (info) => {
+                applyKeyboardHeight(info && info.keyboardHeight ? info.keyboardHeight : 0);
+            });
+            Keyboard.addListener('keyboardWillHide', () => applyKeyboardHeight(0));
+            Keyboard.addListener('keyboardDidHide', () => applyKeyboardHeight(0));
+        }
+
+        // Fallback for plain browser/PWA testing: visualViewport resize.
         if (window.visualViewport) {
-            window.visualViewport.addEventListener('resize', scrollFocusedIntoView);
+            let lastH = window.visualViewport.height;
+            window.visualViewport.addEventListener('resize', () => {
+                const diff = lastH - window.visualViewport.height;
+                lastH = window.visualViewport.height;
+                if (diff > 80) applyKeyboardHeight(diff);
+                else if (diff < -80) applyKeyboardHeight(0);
+                else pinCaretAboveKeyboard();
+            });
         }
 
         const editableEls = [this.els.editTitle, this.els.editLabels, this.els.editContent, this.els.searchInput];
         editableEls.forEach(el => {
             if (!el) return;
-            el.addEventListener('focus', scrollFocusedIntoView);
+            el.addEventListener('focus', pinCaretAboveKeyboard);
+            // Keep caret pinned as the user types/moves the cursor (Enter,
+            // arrow keys, long lines wrapping, etc.)
+            el.addEventListener('input', pinCaretAboveKeyboard);
+            el.addEventListener('keyup', pinCaretAboveKeyboard);
+            el.addEventListener('click', pinCaretAboveKeyboard);
         });
+    },
+
+    // Computes the on-screen pixel position of the caret inside a textarea
+    // using a hidden mirror element, then scrolls the editor view so the
+    // caret line sits just above the (virtual) keyboard.
+    scrollCaretIntoView(textarea) {
+        if (!this._caretMirror) {
+            const mirror = document.createElement('div');
+            mirror.style.position = 'absolute';
+            mirror.style.visibility = 'hidden';
+            mirror.style.whiteSpace = 'pre-wrap';
+            mirror.style.wordWrap = 'break-word';
+            mirror.style.top = '0';
+            mirror.style.left = '-9999px';
+            document.body.appendChild(mirror);
+            this._caretMirror = mirror;
+        }
+        const mirror = this._caretMirror;
+        const cs = window.getComputedStyle(textarea);
+        ['fontFamily','fontSize','fontWeight','lineHeight','letterSpacing','padding','border','boxSizing','width']
+            .forEach(p => mirror.style[p] = cs[p]);
+        mirror.style.width = textarea.clientWidth + 'px';
+
+        const caretPos = textarea.selectionStart;
+        const before = textarea.value.substring(0, caretPos);
+        mirror.textContent = before;
+        const marker = document.createElement('span');
+        marker.textContent = '|';
+        mirror.appendChild(marker);
+
+        const taRect = textarea.getBoundingClientRect();
+        const markerRect = marker.getBoundingClientRect();
+        const mirrorRect = mirror.getBoundingClientRect();
+        const caretOffsetInTextarea = markerRect.top - mirrorRect.top - textarea.scrollTop;
+        const caretY = taRect.top + caretOffsetInTextarea;
+
+        const viewportH = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+        const usableBottom = viewportH - this.keyboardHeight - 70; // leave room for bottom-nav
+        const usableTop = taRect.top > 0 ? Math.max(taRect.top, 90) : 90;
+        const lineHeight = parseFloat(cs.lineHeight) || 24;
+
+        const view = document.getElementById('view-editor');
+        if (!view) return;
+
+        if (caretY + lineHeight > usableBottom) {
+            view.scrollTop += (caretY + lineHeight) - usableBottom;
+        } else if (caretY < usableTop) {
+            view.scrollTop -= usableTop - caretY;
+        }
     },
 
     setupDeleteModal() {

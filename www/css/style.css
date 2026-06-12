@@ -1,0 +1,369 @@
+/* * NODAS: CORE SYSTEM V4 - PURE LOGIC
+ * No BS smooth animations. Instant redraw.
+ */
+:root {
+    /* LIGHT MODE (Amber / Putih Gading Vintage) */
+    --bg: #e6e6dc;
+    --fg: #2b2b2b;
+    --accent: #8b0000;
+    --dim: #6b6b5b;
+    --border: #4a4a4a;
+    --scanline: rgba(0,0,0,0.05);
+    --crt-glow: rgba(255,255,255,0.4);
+    --phosphor: 0 0 2px rgba(43,43,43,0.3);
+    --glitch-1: #ff0000;
+    --glitch-2: #0000ff;
+}
+
+body.dark-mode {
+    /* DARK MODE (Matrix Green / Fallout) */
+    --bg: #050a05;
+    --fg: #33ff00;
+    --accent: #ff3300;
+    --dim: #008800;
+    --border: #33ff00;
+    --scanline: rgba(51,255,0,0.08);
+    --crt-glow: rgba(0,40,0,0.6);
+    --phosphor: 0 0 5px rgba(51,255,0,0.5), 0 0 1px rgba(51,255,0,0.8);
+    --glitch-1: #ff003c;
+    --glitch-2: #00eaff;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Courier New', Courier, monospace;
+    -webkit-tap-highlight-color: transparent;
+    /* BLOKIR SELEKSI TEKS GLOBAL & POPUP NATIVE (UI tidak bisa di-select/copy) */
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+/* PENGECUALIAN: input & textarea (search bar, editor) tetap bisa diketik/diseleksi */
+input, textarea {
+    -webkit-user-select: text !important;
+    user-select: text !important;
+    -webkit-touch-callout: default;
+}
+
+/* TERMINAL TEXT SELECTION */
+::selection { background: var(--fg); color: var(--bg); text-shadow: none; }
+::-moz-selection { background: var(--fg); color: var(--bg); text-shadow: none; }
+
+body {
+    background-color: #000;
+    color: var(--fg);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    height: 100dvh;
+}
+
+/* --- CRT SCREEN CONTAINER --- */
+#screen-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background-color: var(--bg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    text-shadow: var(--phosphor);
+    /* EDGE-TO-EDGE: respect notches/cutouts/status & nav bars when running
+       fullscreen inside Capacitor (FLAG_LAYOUT_NO_LIMITS draws behind them) */
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+}
+
+#screen-container::after {
+    content: " ";
+    display: block;
+    position: absolute;
+    top: 0; left: 0; bottom: 0; right: 0;
+    background: radial-gradient(circle, rgba(0,0,0,0) 50%, rgba(0,0,0,0.4) 100%);
+    z-index: 9997;
+    pointer-events: none;
+}
+
+/* SCANLINES */
+.scanlines {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: linear-gradient(to bottom, var(--scanline) 50%, transparent 50%);
+    background-size: 100% 4px;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.8;
+    animation: scanline-scroll 8s linear infinite;
+}
+@keyframes scanline-scroll {
+    0% { background-position: 0 0; }
+    100% { background-position: 0 100vh; }
+}
+
+.screen-glow {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    box-shadow: inset 0 0 120px var(--crt-glow);
+    pointer-events: none;
+    z-index: 9998;
+    animation: flicker 0.12s infinite;
+}
+@keyframes flicker {
+    0% { opacity: 0.85; }
+    50% { opacity: 0.95; }
+    100% { opacity: 0.9; }
+}
+
+/* --- BOOT SEQUENCE --- */
+#boot-screen {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--bg);
+    z-index: 10000;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+.boot-line { opacity: 0; animation: boot-type 0.05s forwards; }
+@keyframes boot-type { to { opacity: 1; } }
+
+/* --- SYSTEM MESSAGE (TOAST) --- */
+#sys-msg-container {
+    position: absolute;
+    top: 45px; left: 16px; right: 16px;
+    z-index: 9000;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.sys-msg {
+    background: var(--fg);
+    color: var(--bg);
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    font-weight: bold;
+    border-left: 6px solid var(--accent);
+    text-shadow: none;
+}
+
+/* HEADER */
+.sys-header {
+    padding: 12px 16px;
+    border-bottom: 2px solid var(--border);
+    font-size: 0.85rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+    background: var(--bg);
+    z-index: 10;
+}
+.sys-header .title { font-weight: bold; text-transform: uppercase; }
+.sys-header .bits { color: var(--dim); letter-spacing: 2px; }
+
+/* VIEWS SYSTEM - INSTANT SWITCH */
+.view {
+    display: none;
+    flex: 1;
+    flex-direction: column;
+    overflow-y: auto;
+    position: relative;
+    padding-bottom: 80px;
+}
+/* No more smooth turn-on animations. Pure instant draw. */
+.view.active { display: flex; }
+
+/* SEARCH / GREP PROMPT (COLLAPSIBLE — tap to activate) */
+.cli-prompt {
+    padding: 16px;
+    color: var(--dim);
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+    border-bottom: 1px dotted var(--dim);
+    background: rgba(0,0,0,0.02);
+    cursor: pointer;
+}
+.cli-prompt span { color: var(--accent); font-weight: bold; }
+.cli-input {
+    background: transparent;
+    border: none;
+    color: var(--fg);
+    font-size: 0.9rem;
+    outline: none;
+    flex: 1;
+    min-width: 150px;
+    caret-shape: block;
+    text-shadow: var(--phosphor);
+    pointer-events: none; /* inert until activated */
+}
+.cli-input::placeholder { color: var(--dim); opacity: 0.5; }
+
+/* When activated, input becomes interactive + visually focused */
+.cli-prompt.active {
+    cursor: text;
+    background: rgba(0,0,0,0.05);
+    border-bottom: 1px solid var(--fg);
+}
+.cli-prompt.active .cli-input {
+    pointer-events: auto;
+}
+
+/* Hint shown only while collapsed/inactive */
+.cli-hint {
+    color: var(--dim);
+    opacity: 0.5;
+    font-size: 0.85rem;
+}
+.cli-prompt.active .cli-hint { display: none; }
+
+/* Clear/close button — only visible when active */
+.cli-close {
+    display: none;
+    color: var(--dim);
+    font-weight: bold;
+    padding: 0 4px;
+    cursor: pointer;
+}
+.cli-prompt.active .cli-close { display: inline-block; }
+
+/* BLOCK CURSOR */
+.blinking-cursor {
+    display: inline-block;
+    width: 0.6em;
+    height: 1.1em;
+    background-color: var(--fg);
+    vertical-align: text-bottom;
+    animation: blink 1s step-end infinite;
+}
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+/* NOTE ITEM */
+.note-list { list-style: none; padding: 0 16px; }
+.note-item {
+    padding: 16px 0;
+    border-bottom: 1px dotted var(--dim);
+    cursor: pointer;
+    position: relative;
+}
+.note-item::before {
+    content: '>';
+    position: absolute;
+    left: -15px;
+    opacity: 0;
+    color: var(--accent);
+}
+.note-item:active::before { opacity: 1; left: 0; }
+.note-item:active { padding-left: 16px; background: var(--fg); color: var(--bg); text-shadow: none;}
+.note-item:active .note-meta, .note-item:active .note-tags { color: var(--bg); opacity: 0.8; }
+.note-item:active .pin-badge { background: var(--bg); color: var(--fg); }
+
+.note-meta { font-size: 0.75rem; color: var(--dim); margin-bottom: 4px; display: flex; gap: 8px; }
+.note-title { font-weight: bold; font-size: 1.1rem; margin-bottom: 4px; word-wrap: break-word; }
+.note-tags { font-size: 0.75rem; color: var(--dim); }
+.pin-badge { background: var(--fg); color: var(--bg); padding: 0 4px; font-size: 0.6rem; font-weight: bold; text-shadow: none; }
+
+/* TIMELINE / LOG VIEW */
+.log-container {
+    padding: 16px;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--dim);
+}
+.log-entry { margin-bottom: 8px; word-wrap: break-word; border-left: 2px solid var(--border); padding-left: 8px;}
+.log-time { color: var(--fg); font-weight: bold; }
+.log-label { color: var(--accent); }
+.log-title { color: var(--fg); text-decoration: underline; cursor: pointer; }
+
+/* BOTTOM NAV */
+.bottom-nav {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: var(--bg);
+    border-top: 2px solid var(--border);
+    display: flex;
+    padding: 8px 12px;
+    gap: 8px;
+    z-index: 100;
+}
+.btn {
+    flex: 1;
+    background: transparent;
+    color: var(--fg);
+    border: 1px solid var(--border);
+    padding: 12px 0;
+    font-weight: bold;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    cursor: pointer;
+    text-shadow: var(--phosphor);
+    position: relative;
+}
+.btn:active { background: var(--fg); color: var(--bg); text-shadow: none; border-color: var(--fg);}
+.btn.primary { border: 2px solid var(--fg); }
+.btn.danger { border-color: var(--accent); color: var(--accent); }
+.btn.danger:active { background: var(--accent); color: var(--bg); }
+
+/* EDITOR VIEW */
+.editor-header { padding: 16px; display: flex; flex-direction: column; gap: 12px; border-bottom: 1px dotted var(--dim); }
+.input-group { display: flex; flex-direction: column; }
+.input-group label { font-size: 0.8rem; color: var(--dim); margin-bottom: 4px; }
+
+.editor-input, .editor-textarea {
+    background: transparent;
+    border: none;
+    color: var(--fg);
+    font-size: 1.1rem;
+    outline: none;
+    width: 100%;
+    text-shadow: var(--phosphor);
+    caret-color: var(--fg);
+    caret-shape: block;
+}
+.editor-input { border-bottom: 1px solid var(--dim); padding-bottom: 4px; }
+.editor-input::placeholder, .editor-textarea::placeholder { color: var(--dim); opacity: 0.4; }
+.editor-textarea { flex: 1; padding: 16px; resize: none; line-height: 1.6; min-height: 50vh; }
+.editor-actions { display: flex; gap: 8px; overflow-x: auto; padding: 10px 16px; border-bottom: 1px dotted var(--dim); }
+.editor-actions .btn { flex: none; padding: 8px 16px; font-size: 0.8rem; }
+
+/* SETTINGS VIEW */
+.settings-container { padding: 16px; display: flex; flex-direction: column; gap: 20px; }
+.settings-block { border: 1px solid var(--dim); padding: 16px; position: relative; }
+.settings-block h3 { margin-bottom: 10px; font-size: 1rem; text-transform: uppercase; color: var(--fg); border-bottom: 1px solid var(--dim); display: inline-block; padding-bottom: 2px;}
+.settings-block p { font-size: 0.85rem; color: var(--dim); margin-bottom: 16px; }
+
+/* GLITCH EFFECTS */
+.redraw-anim { animation: crt-redraw 0.1s linear forwards; }
+@keyframes crt-redraw {
+    0% { opacity: 0; filter: contrast(300%) invert(1); }
+    50% { opacity: 0.5; filter: contrast(150%); }
+    100% { opacity: 1; filter: none; }
+}
+
+.glitch-hard { animation: glitch-rgb 0.2s cubic-bezier(.25,.46,.45,.94) both; }
+@keyframes glitch-rgb {
+    0% { transform: skewX(0); text-shadow: var(--phosphor); }
+    20% { transform: skewX(-15deg); text-shadow: 4px 0 var(--glitch-1), -4px 0 var(--glitch-2); background: var(--fg); color: var(--bg); }
+    40% { transform: skewX(15deg); text-shadow: -4px 0 var(--glitch-1), 4px 0 var(--glitch-2); }
+    60% { transform: skewX(-5deg); text-shadow: var(--phosphor); }
+    100% { transform: skewX(0); background: transparent; color: inherit; }
+}
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg); border-left: 1px solid var(--dim); }
+::-webkit-scrollbar-thumb { background: var(--fg); }
+
+#file-input { display: none; }

@@ -1,0 +1,11 @@
+{
+  "appId": "com.nodas.terminal",
+  "appName": "Nodas",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "plugins": {
+    "StatusBar": {
+      "overlaysWebView": true
+    }
+  }
+}

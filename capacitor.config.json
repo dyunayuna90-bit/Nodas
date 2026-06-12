@@ -8,8 +8,9 @@
       "overlaysWebView": true
     },
     "Keyboard": {
-      "resize": "body",
-      "resizeOnFullScreen": true
+      "resize": "native",
+      "resizeOnFullScreen": true,
+      "style": "default"
     }
   }
 }

@@ -223,7 +223,6 @@ const app = {
         if (!editorEl) return;
 
         const applyViewport = () => {
-            if (!editorEl.classList.contains('active')) return;
             const vv = window.visualViewport;
             if (vv) {
                 editorEl.style.height = vv.height + 'px';
@@ -241,6 +240,8 @@ const app = {
             window.visualViewport.addEventListener('scroll', applyViewport);
         }
         window.addEventListener('resize', applyViewport);
+        // Run once immediately so size is correct on first open
+        applyViewport();
     },
 
     setupDeleteModal() {
@@ -493,21 +494,29 @@ const app = {
     showView(viewId) {
         if(!this.booted) return;
 
-        // INSTANT REDRAW LOGIC
+        const editorEl = document.getElementById('view-editor');
+
+        if (viewId === 'editor') {
+            // Editor lives outside #screen-container — hide regular views,
+            // show the editor overlay, then size it to the visible viewport.
+            this.els.views.forEach(v => v.classList.remove('active'));
+            editorEl.classList.add('active');
+            if (this._applyEditorViewport) this._applyEditorViewport();
+            this.screenRedraw();
+            setTimeout(() => this.els.editContent.focus(), 50);
+            return;
+        }
+
+        // Leaving editor or switching to another view
+        editorEl.classList.remove('active');
         this.els.views.forEach(v => v.classList.remove('active'));
         document.getElementById(`view-${viewId}`).classList.add('active');
-
-        this.screenRedraw(); // Brief CRT flicker on switch
+        this.screenRedraw();
 
         if (viewId === 'list') {
             this.renderNotes();
         } else if (viewId === 'timeline') {
             this.renderTimeline();
-        } else if (viewId === 'editor') {
-            // Apply viewport sizing immediately so editor fills the correct
-            // area from the moment it becomes visible (before keyboard opens).
-            if (this._applyEditorViewport) this._applyEditorViewport();
-            this.els.editContent.focus();
         }
     },
 

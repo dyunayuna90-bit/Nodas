@@ -2,6 +2,7 @@
 
 const app = {
     notes: [],
+    logs: [],
     currentNoteId: null,
     isDarkMode: false,
     lang: 'en',
@@ -10,6 +11,8 @@ const app = {
     booted: false,
     searchQuery: '',
     searchActive: false,
+    pendingDeleteId: null,
+    editorEntryState: null, // snapshot of title/content/labels when entering editor, for auto-save diffing
 
     els: {},
 
@@ -22,6 +25,8 @@ const app = {
         this.setupHardwareBackButton();
         this.setupTypingSound();
         this.setupSearch();
+        this.setupKeyboardScroll();
+        this.setupDeleteModal();
 
         history.replaceState({ view: 'list' }, '', '#list');
 
@@ -56,7 +61,10 @@ const app = {
             editLabels: document.getElementById('edit-labels'),
             editContent: document.getElementById('edit-content'),
             btnPin: document.getElementById('btn-pin'),
-            sysMsgContainer: document.getElementById('sys-msg-container')
+            sysMsgContainer: document.getElementById('sys-msg-container'),
+            modalOverlay: document.getElementById('modal-overlay'),
+            delConfirmInput: document.getElementById('del-confirm-input'),
+            delConfirmBtn: document.getElementById('del-confirm-btn')
         };
     },
 
@@ -136,7 +144,16 @@ const app = {
     },
 
     setupTypingSound() {
-        const playType = () => this.playTone('type');
+        // Throttle: playing a fresh oscillator on every keystroke caused
+        // perceptible input lag on lower-end devices. We now cap the
+        // type-sound to at most once every 40ms.
+        let lastType = 0;
+        const playType = () => {
+            const now = performance.now();
+            if (now - lastType < 40) return;
+            lastType = now;
+            this.playTone('type');
+        };
         this.els.searchInput.addEventListener('input', playType);
         this.els.editTitle.addEventListener('input', playType);
         this.els.editLabels.addEventListener('input', playType);
@@ -196,6 +213,71 @@ const app = {
         }
     },
 
+    // ─── KEYBOARD-AWARE SCROLLING ──────────────────────────────────────
+    // On native/WebView, the soft keyboard shrinks the visual viewport but
+    // the document doesn't reflow like a desktop browser, so a focused
+    // input/textarea near the bottom can end up hidden behind the keyboard.
+    // We listen for visualViewport resizes (keyboard open/close) and for
+    // focus events on editable fields, then scroll the focused element's
+    // view into a visible position — mirroring how a normal browser would
+    // auto-scroll to keep the caret visible.
+    setupKeyboardScroll() {
+        const scrollFocusedIntoView = () => {
+            const active = document.activeElement;
+            if (!active) return;
+            const tag = active.tagName;
+            if (tag !== 'TEXTAREA' && tag !== 'INPUT') return;
+
+            // Use a small delay so layout has settled after the keyboard
+            // animation finishes.
+            setTimeout(() => {
+                active.scrollIntoView({ block: 'center', behavior: 'smooth' });
+
+                // Additionally, for the editor textarea, make sure the
+                // caret position itself stays visible by nudging the
+                // view's scrollTop based on cursor line.
+                if (active === this.els.editContent) {
+                    const view = document.getElementById('view-editor');
+                    if (view) {
+                        const rect = active.getBoundingClientRect();
+                        const viewportH = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+                        if (rect.bottom > viewportH) {
+                            view.scrollTop += (rect.bottom - viewportH) + 24;
+                        }
+                    }
+                }
+            }, 80);
+        };
+
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', scrollFocusedIntoView);
+        }
+
+        const editableEls = [this.els.editTitle, this.els.editLabels, this.els.editContent, this.els.searchInput];
+        editableEls.forEach(el => {
+            if (!el) return;
+            el.addEventListener('focus', scrollFocusedIntoView);
+        });
+    },
+
+    setupDeleteModal() {
+        this.els.delConfirmInput.addEventListener('input', (e) => {
+            this.els.delConfirmInput.classList.remove('shake');
+            if (e.target.value.trim().toLowerCase() === 'ok') {
+                this.els.delConfirmBtn.classList.add('enabled');
+            } else {
+                this.els.delConfirmBtn.classList.remove('enabled');
+            }
+        });
+        this.els.delConfirmInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') this.confirmDelete();
+        });
+        // Tapping the dark backdrop cancels (tap on box itself does not)
+        this.els.modalOverlay.addEventListener('click', (e) => {
+            if (e.target === this.els.modalOverlay) this.closeDeleteModal();
+        });
+    },
+
     sysMsg(text) {
         const msg = document.createElement('div');
         msg.className = 'sys-msg';
@@ -225,9 +307,32 @@ const app = {
             const data = localStorage.getItem('nodas_db');
             if (data) this.notes = JSON.parse(data);
         } catch (e) { this.notes = []; }
+        try {
+            const logData = localStorage.getItem('nodas_logs');
+            if (logData) this.logs = JSON.parse(logData);
+        } catch (e) { this.logs = []; }
     },
 
     saveData() { localStorage.setItem('nodas_db', JSON.stringify(this.notes)); },
+
+    saveLogs() {
+        // Keep the log bounded so storage doesn't grow unbounded.
+        if (this.logs.length > 500) this.logs = this.logs.slice(-500);
+        localStorage.setItem('nodas_logs', JSON.stringify(this.logs));
+    },
+
+    // ─── ACTIVITY LOG ──────────────────────────────────────────────────
+    // action: 'create' | 'edit' | 'open' | 'delete' | 'pin' | 'unpin'
+    logActivity(action, noteId, title) {
+        this.logs.push({
+            id: 'log_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+            action,
+            noteId,
+            title: title || 'unnamed',
+            timestamp: Date.now()
+        });
+        this.saveLogs();
+    },
 
     t(key, params = {}) {
         let text = dict[this.lang][key] || key;
@@ -252,6 +357,13 @@ const app = {
         document.getElementById('btn-import').innerText = this.t('btnImport');
         document.getElementById('btn-return').innerText = this.t('btnReturn');
         if (this.els.searchHint) this.els.searchHint.innerText = this.t('searchHint');
+
+        document.getElementById('del-modal-title').innerText = this.t('delConfirmTitle');
+        document.getElementById('del-modal-body').innerText = this.t('delConfirmBody');
+        document.getElementById('del-modal-instruction').innerText = this.t('delConfirmInstruction');
+        this.els.delConfirmInput.placeholder = this.t('delConfirmPlaceholder');
+        this.els.delConfirmBtn.innerText = this.t('delConfirmBtn');
+        document.getElementById('del-cancel-btn').innerText = this.t('delCancelBtn');
 
         document.getElementById('btn-lang').innerText = `LANG: ${this.lang.toUpperCase()}`;
         document.getElementById('btn-audio').innerText = `AUDIO: ${this.audioEnabled ? 'ON' : 'OFF'}`;
@@ -326,6 +438,13 @@ const app = {
         window.history.back();
     },
 
+    // Explicit "ABORT" — discards changes without triggering the
+    // hardware-back auto-save behavior.
+    abortEdit() {
+        this._skipAutoSave = true;
+        this.goBack();
+    },
+
     // ─── HARDWARE BACK BUTTON ROUTING ─────────────────────────────────────
     // Order of priority mirrors a typical mobile-app back stack:
     // 1. Search bar (if active) closes first.
@@ -337,9 +456,54 @@ const app = {
                 this.deactivateSearch(false);
                 return;
             }
+
+            // AUTO-SAVE: if the user is leaving the editor (hardware back,
+            // gesture-back, etc.) and there's unsaved content, persist it
+            // automatically instead of discarding the edit.
+            const editorView = document.getElementById('view-editor');
+            if (editorView && editorView.classList.contains('active')) {
+                this.autoSaveOnExit();
+            }
+
             if (event.state && event.state.view) this.showView(event.state.view);
             else if (this.booted) this.showView('list');
         });
+    },
+
+    // Saves the current editor content silently (no extra history nav,
+    // since the back navigation is already in flight) if anything changed.
+    autoSaveOnExit() {
+        if (this._skipAutoSave) { this._skipAutoSave = false; return; }
+
+        const title = this.els.editTitle.value.trim();
+        const content = this.els.editContent.value.trim();
+        const labels = this.els.editLabels.value.trim()
+            ? this.els.editLabels.value.trim().split(',').map(l => l.trim()).filter(l => l)
+            : [];
+        const isPinned = this.els.btnPin.innerText === this.t('btnUnpin');
+
+        if (!title && !content) return; // nothing to save
+
+        if (this.currentNoteId) {
+            const idx = this.notes.findIndex(n => n.id === this.currentNoteId);
+            if (idx > -1) {
+                const prev = this.notes[idx];
+                const changed = prev.title !== title || prev.content !== content ||
+                    prev.pinned !== isPinned || JSON.stringify(prev.labels) !== JSON.stringify(labels);
+                if (!changed) return;
+                this.notes[idx] = { ...prev, title, content, labels, pinned: isPinned, updatedAt: Date.now() };
+                this.logActivity('edit', prev.id, title);
+            }
+        } else {
+            const id = 'nodas_' + Date.now().toString(36);
+            this.notes.push({
+                id, title, content, labels, pinned: isPinned,
+                createdAt: Date.now(), updatedAt: Date.now()
+            });
+            this.logActivity('create', id, title);
+        }
+        this.saveData();
+        this.sysMsg(this.t('msgAutoSave'));
     },
 
     showView(viewId) {
@@ -405,23 +569,37 @@ const app = {
     renderTimeline() {
         this.els.timelineContainer.innerHTML = '';
         // Sort absolute chronological (newest first)
-        const timelineNotes = [...this.notes].sort((a, b) => b.updatedAt - a.updatedAt);
+        const sortedLogs = [...this.logs].sort((a, b) => b.timestamp - a.timestamp);
 
-        if (timelineNotes.length === 0) {
-            this.els.timelineContainer.innerHTML = '<div>No logs found.</div>';
+        if (sortedLogs.length === 0) {
+            this.els.timelineContainer.innerHTML = `<div>${this.t('logEmpty')}</div>`;
             return;
         }
 
-        timelineNotes.forEach(note => {
-            const time = this.formatTime(note.updatedAt);
-            const labelStr = note.labels.length > 0 ? ` <span class="log-label">[${note.labels.join(',')}]</span>` : '';
-            const pinStr = note.pinned ? ` <span style="color:var(--bg); background:var(--fg);">[PIN]</span>` : '';
+        const actionMeta = {
+            create: { cls: 'create', label: this.t('logCreated') },
+            edit:   { cls: 'edit',   label: this.t('logEdited') },
+            open:   { cls: 'open',   label: this.t('logOpened') },
+            delete: { cls: 'delete', label: this.t('logDeleted') },
+            pin:    { cls: 'pin',    label: this.t('logPinned') },
+            unpin:  { cls: 'pin',    label: this.t('logUnpinned') }
+        };
+
+        sortedLogs.forEach(entry => {
+            const time = this.formatTime(entry.timestamp);
+            const meta = actionMeta[entry.action] || { cls: '', label: entry.action.toUpperCase() };
+            const noteExists = this.notes.some(n => n.id === entry.noteId);
+
+            const titleHtml = noteExists
+                ? `<span class="log-title" onclick="app.openEditor('${entry.noteId}')">${entry.title || 'unnamed'}</span>`
+                : `<span class="log-title deleted">${entry.title || 'unnamed'}</span>`;
 
             const div = document.createElement('div');
             div.className = 'log-entry';
             div.innerHTML = `
-                <span class="log-time">[${time}]</span>${pinStr}${labelStr}
-                SYS_WRITE: <span class="log-title" onclick="app.openEditor('${note.id}')">${note.title || 'unnamed'}</span>
+                <span class="log-time">[${time}]</span>
+                <span class="log-action ${meta.cls}">${meta.label}</span>
+                ${titleHtml}
             `;
             this.els.timelineContainer.appendChild(div);
         });
@@ -444,6 +622,7 @@ const app = {
         this.els.editLabels.value = note.labels.join(', ');
         this.els.editContent.value = note.content;
         this.els.btnPin.innerText = note.pinned ? this.t('btnUnpin') : this.t('btnPin');
+        this.logActivity('open', note.id, note.title);
         this.navigate('editor');
     },
 
@@ -456,43 +635,105 @@ const app = {
 
         const isPinned = this.els.btnPin.innerText === this.t('btnUnpin');
 
+
         if (this.currentNoteId) {
             const idx = this.notes.findIndex(n => n.id === this.currentNoteId);
-            if (idx > -1) this.notes[idx] = { ...this.notes[idx], title, content, labels, pinned: isPinned, updatedAt: Date.now() };
+            if (idx > -1) {
+                this.notes[idx] = { ...this.notes[idx], title, content, labels, pinned: isPinned, updatedAt: Date.now() };
+                this.logActivity('edit', this.currentNoteId, title);
+            }
         } else {
+            const id = 'nodas_' + Date.now().toString(36);
             this.notes.push({
-                id: 'nodas_' + Date.now().toString(36),
+                id,
                 title, content, labels, pinned: isPinned,
                 createdAt: Date.now(), updatedAt: Date.now()
             });
+            this.logActivity('create', id, title);
         }
         this.saveData();
         this.playTone('success');
         this.sysMsg(this.t('msgSave'));
         this.screenRedraw(true);
+        this._skipAutoSave = true;
         setTimeout(() => this.goBack(), 100);
     },
 
     togglePin() {
         this.playTone('click');
+        const title = this.els.editTitle.value.trim() || 'unnamed';
         if (this.els.btnPin.innerText === this.t('btnUnpin')) {
             this.els.btnPin.innerText = this.t('btnPin');
             this.sysMsg(this.t('msgUnpin'));
+            if (this.currentNoteId) this.logActivity('unpin', this.currentNoteId, title);
         } else {
             this.els.btnPin.innerText = this.t('btnUnpin');
             this.sysMsg(this.t('msgPin'));
+            if (this.currentNoteId) this.logActivity('pin', this.currentNoteId, title);
         }
         this.screenRedraw();
     },
 
     deleteCurrentNote() {
         if (!this.currentNoteId) { this.goBack(); return; }
-        this.notes = this.notes.filter(n => n.id !== this.currentNoteId);
+        this.openDeleteModal(this.currentNoteId);
+    },
+
+    // ─── DELETE CONFIRMATION MODAL ─────────────────────────────────────
+    openDeleteModal(noteId) {
+        this.playTone('click');
+        this.pendingDeleteId = noteId;
+        this.els.delConfirmInput.value = '';
+        this.els.delConfirmBtn.classList.remove('enabled');
+        this.els.modalOverlay.classList.add('active');
+        setTimeout(() => this.els.delConfirmInput.focus(), 50);
+    },
+
+    closeDeleteModal() {
+        this.playTone('click');
+        this.pendingDeleteId = null;
+        this.els.modalOverlay.classList.remove('active');
+        this.els.delConfirmInput.value = '';
+        this.els.delConfirmInput.blur();
+    },
+
+    confirmDelete() {
+        const val = this.els.delConfirmInput.value.trim().toLowerCase();
+        if (val !== 'ok') {
+            this.playTone('error');
+            this.els.delConfirmInput.classList.remove('shake');
+            void this.els.delConfirmInput.offsetWidth;
+            this.els.delConfirmInput.classList.add('shake');
+            this.sysMsg(this.t('delConfirmError'));
+            return;
+        }
+
+        const noteId = this.pendingDeleteId;
+        const note = this.notes.find(n => n.id === noteId);
+        const title = note ? note.title : 'unnamed';
+
+        this.notes = this.notes.filter(n => n.id !== noteId);
         this.saveData();
+        this.logActivity('delete', noteId, title);
+
+        this.els.modalOverlay.classList.remove('active');
+        this.els.delConfirmInput.value = '';
+        this.pendingDeleteId = null;
+
         this.playTone('delete');
         this.sysMsg(this.t('msgDelete'));
         this.screenRedraw(true);
-        setTimeout(() => this.goBack(), 100);
+
+        // If we were inside the editor for the deleted note, exit back to list.
+        const editorView = document.getElementById('view-editor');
+        if (editorView && editorView.classList.contains('active') && this.currentNoteId === noteId) {
+            this.currentNoteId = null;
+            this._skipAutoSave = true;
+            setTimeout(() => this.goBack(), 100);
+        } else {
+            this.renderNotes();
+            this.renderTimeline();
+        }
     },
 
     exportData() {

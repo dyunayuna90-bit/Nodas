@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Nodas - Pure Logic Terminal</title>
+    <meta name="theme-color" content="#0a0a0a">
+    <style>
+        /* * NODAS: CORE SYSTEM V4 - PURE LOGIC
+         * No BS smooth animations. Instant redraw.
+         */
+        :root {
+            /* LIGHT MODE (Amber / Putih Gading Vintage) */
+            --bg: #e6e6dc;
+            --fg: #2b2b2b;
+            --accent: #8b0000;
+            --dim: #6b6b5b;
+            --border: #4a4a4a;
+            --scanline: rgba(0,0,0,0.05);
+            --crt-glow: rgba(255,255,255,0.4);
+            --phosphor: 0 0 2px rgba(43,43,43,0.3);
+            --glitch-1: #ff0000;
+            --glitch-2: #0000ff;
+        }
+
+        body.dark-mode {
+            /* DARK MODE (Matrix Green / Fallout) */
+            --bg: #050a05;
+            --fg: #33ff00;
+            --accent: #ff3300;
+            --dim: #008800;
+            --border: #33ff00;
+            --scanline: rgba(51,255,0,0.08);
+            --crt-glow: rgba(0,40,0,0.6);
+            --phosphor: 0 0 5px rgba(51,255,0,0.5), 0 0 1px rgba(51,255,0,0.8);
+            --glitch-1: #ff003c;
+            --glitch-2: #00eaff;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Courier New', Courier, monospace;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* TERMINAL TEXT SELECTION */
+        ::selection { background: var(--fg); color: var(--bg); text-shadow: none; }
+        ::-moz-selection { background: var(--fg); color: var(--bg); text-shadow: none; }
+
+        body {
+            background-color: #000; 
+            color: var(--fg);
+            overflow: hidden; 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            height: 100dvh;
+        }
+
+        /* --- CRT SCREEN CONTAINER --- */
+        #screen-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            text-shadow: var(--phosphor);
+        }
+
+        #screen-container::after {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: radial-gradient(circle, rgba(0,0,0,0) 50%, rgba(0,0,0,0.4) 100%);
+            z-index: 9997;
+            pointer-events: none;
+        }
+
+        /* SCANLINES */
+        .scanlines {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(to bottom, var(--scanline) 50%, transparent 50%);
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 9999;
+            opacity: 0.8;
+            animation: scanline-scroll 8s linear infinite;
+        }
+        @keyframes scanline-scroll {
+            0% { background-position: 0 0; }
+            100% { background-position: 0 100vh; }
+        }
+        
+        .screen-glow {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            box-shadow: inset 0 0 120px var(--crt-glow);
+            pointer-events: none;
+            z-index: 9998;
+            animation: flicker 0.12s infinite;
+        }
+        @keyframes flicker {
+            0% { opacity: 0.85; }
+            50% { opacity: 0.95; }
+            100% { opacity: 0.9; }
+        }
+
+        /* --- BOOT SEQUENCE --- */
+        #boot-screen {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--bg);
+            z-index: 10000;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+        .boot-line { opacity: 0; animation: boot-type 0.05s forwards; }
+        @keyframes boot-type { to { opacity: 1; } }
+
+        /* --- SYSTEM MESSAGE (TOAST) --- */
+        #sys-msg-container {
+            position: absolute;
+            top: 45px; left: 16px; right: 16px;
+            z-index: 9000;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .sys-msg {
+            background: var(--fg);
+            color: var(--bg);
+            padding: 8px 12px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            border-left: 6px solid var(--accent);
+            text-shadow: none; 
+        }
+
+        /* HEADER */
+        .sys-header {
+            padding: 12px 16px;
+            border-bottom: 2px solid var(--border);
+            font-size: 0.85rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+            background: var(--bg);
+            z-index: 10;
+        }
+        .sys-header .title { font-weight: bold; text-transform: uppercase; }
+        .sys-header .bits { color: var(--dim); letter-spacing: 2px; }
+
+        /* VIEWS SYSTEM - INSTANT SWITCH */
+        .view {
+            display: none;
+            flex: 1;
+            flex-direction: column;
+            overflow-y: auto;
+            position: relative;
+            padding-bottom: 80px; 
+        }
+        /* No more smooth turn-on animations. Pure instant draw. */
+        .view.active { display: flex; }
+
+        /* SEARCH / GREP PROMPT */
+        .cli-prompt {
+            padding: 16px;
+            color: var(--dim);
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 4px;
+            border-bottom: 1px dotted var(--dim);
+            background: rgba(0,0,0,0.02);
+        }
+        .cli-prompt span { color: var(--accent); font-weight: bold; }
+        .cli-input {
+            background: transparent;
+            border: none;
+            color: var(--fg);
+            font-size: 0.9rem;
+            outline: none;
+            flex: 1;
+            min-width: 150px;
+            caret-shape: block;
+            text-shadow: var(--phosphor);
+        }
+        .cli-input::placeholder { color: var(--dim); opacity: 0.5; }
+
+        /* BLOCK CURSOR */
+        .blinking-cursor {
+            display: inline-block;
+            width: 0.6em; 
+            height: 1.1em;
+            background-color: var(--fg);
+            vertical-align: text-bottom;
+            animation: blink 1s step-end infinite;
+        }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+        /* NOTE ITEM */
+        .note-list { list-style: none; padding: 0 16px; }
+        .note-item {
+            padding: 16px 0;
+            border-bottom: 1px dotted var(--dim);
+            cursor: pointer;
+            position: relative;
+        }
+        .note-item::before {
+            content: '>';
+            position: absolute;
+            left: -15px;
+            opacity: 0;
+            color: var(--accent);
+        }
+        .note-item:active::before { opacity: 1; left: 0; }
+        .note-item:active { padding-left: 16px; background: var(--fg); color: var(--bg); text-shadow: none;}
+        .note-item:active .note-meta, .note-item:active .note-tags { color: var(--bg); opacity: 0.8; }
+        .note-item:active .pin-badge { background: var(--bg); color: var(--fg); }
+        
+        .note-meta { font-size: 0.75rem; color: var(--dim); margin-bottom: 4px; display: flex; gap: 8px; }
+        .note-title { font-weight: bold; font-size: 1.1rem; margin-bottom: 4px; word-wrap: break-word; }
+        .note-tags { font-size: 0.75rem; color: var(--dim); }
+        .pin-badge { background: var(--fg); color: var(--bg); padding: 0 4px; font-size: 0.6rem; font-weight: bold; text-shadow: none; }
+
+        /* TIMELINE / LOG VIEW */
+        .log-container {
+            padding: 16px;
+            font-size: 0.8rem;
+            line-height: 1.5;
+            color: var(--dim);
+        }
+        .log-entry { margin-bottom: 8px; word-wrap: break-word; border-left: 2px solid var(--border); padding-left: 8px;}
+        .log-time { color: var(--fg); font-weight: bold; }
+        .log-label { color: var(--accent); }
+        .log-title { color: var(--fg); text-decoration: underline; cursor: pointer; }
+        
+        /* BOTTOM NAV */
+        .bottom-nav {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            background: var(--bg);
+            border-top: 2px solid var(--border);
+            display: flex;
+            padding: 8px 12px;
+            gap: 8px;
+            z-index: 100;
+        }
+        .btn {
+            flex: 1;
+            background: transparent;
+            color: var(--fg);
+            border: 1px solid var(--border);
+            padding: 12px 0;
+            font-weight: bold;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            cursor: pointer;
+            text-shadow: var(--phosphor);
+            position: relative;
+        }
+        .btn:active { background: var(--fg); color: var(--bg); text-shadow: none; border-color: var(--fg);}
+        .btn.primary { border: 2px solid var(--fg); }
+        .btn.danger { border-color: var(--accent); color: var(--accent); }
+        .btn.danger:active { background: var(--accent); color: var(--bg); }
+
+        /* EDITOR VIEW */
+        .editor-header { padding: 16px; display: flex; flex-direction: column; gap: 12px; border-bottom: 1px dotted var(--dim); }
+        .input-group { display: flex; flex-direction: column; }
+        .input-group label { font-size: 0.8rem; color: var(--dim); margin-bottom: 4px; }
+        
+        .editor-input, .editor-textarea {
+            background: transparent;
+            border: none;
+            color: var(--fg);
+            font-size: 1.1rem;
+            outline: none;
+            width: 100%;
+            text-shadow: var(--phosphor);
+            caret-color: var(--fg);
+            caret-shape: block; 
+        }
+        .editor-input { border-bottom: 1px solid var(--dim); padding-bottom: 4px; }
+        .editor-input::placeholder, .editor-textarea::placeholder { color: var(--dim); opacity: 0.4; }
+        .editor-textarea { flex: 1; padding: 16px; resize: none; line-height: 1.6; min-height: 50vh; }
+        .editor-actions { display: flex; gap: 8px; overflow-x: auto; padding: 10px 16px; border-bottom: 1px dotted var(--dim); }
+        .editor-actions .btn { flex: none; padding: 8px 16px; font-size: 0.8rem; }
+
+        /* SETTINGS VIEW */
+        .settings-container { padding: 16px; display: flex; flex-direction: column; gap: 20px; }
+        .settings-block { border: 1px solid var(--dim); padding: 16px; position: relative; }
+        .settings-block h3 { margin-bottom: 10px; font-size: 1rem; text-transform: uppercase; color: var(--fg); border-bottom: 1px solid var(--dim); display: inline-block; padding-bottom: 2px;}
+        .settings-block p { font-size: 0.85rem; color: var(--dim); margin-bottom: 16px; }
+
+        /* GLITCH EFFECTS */
+        .redraw-anim { animation: crt-redraw 0.1s linear forwards; }
+        @keyframes crt-redraw {
+            0% { opacity: 0; filter: contrast(300%) invert(1); }
+            50% { opacity: 0.5; filter: contrast(150%); }
+            100% { opacity: 1; filter: none; }
+        }
+
+        .glitch-hard { animation: glitch-rgb 0.2s cubic-bezier(.25,.46,.45,.94) both; }
+        @keyframes glitch-rgb {
+            0% { transform: skewX(0); text-shadow: var(--phosphor); }
+            20% { transform: skewX(-15deg); text-shadow: 4px 0 var(--glitch-1), -4px 0 var(--glitch-2); background: var(--fg); color: var(--bg); }
+            40% { transform: skewX(15deg); text-shadow: -4px 0 var(--glitch-1), 4px 0 var(--glitch-2); }
+            60% { transform: skewX(-5deg); text-shadow: var(--phosphor); }
+            100% { transform: skewX(0); background: transparent; color: inherit; }
+        }
+
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: var(--bg); border-left: 1px solid var(--dim); }
+        ::-webkit-scrollbar-thumb { background: var(--fg); }
+
+        #file-input { display: none; }
+    </style>
+</head>
+<body>
+    <div id="screen-container">
+        <div class="scanlines"></div>
+        <div class="screen-glow"></div>
+        <div id="boot-screen"></div>
+        <div id="sys-msg-container"></div>
+
+        <header class="sys-header" onclick="app.playTone('click')">
+            <div class="title">NODAS_KERNEL <span id="mode-indicator">[LGT]</span></div>
+            <div class="bits" id="bit-anim">01010101</div>
+        </header>
+
+        <!-- VIEW: LIST (HOME) -->
+        <main id="view-list" class="view">
+            <div class="cli-prompt">
+                <span>root@nodas:~$</span> grep 
+                <input type="text" id="search-input" class="cli-input" placeholder="search data...">
+            </div>
+            <div style="padding: 4px 16px; font-size:0.7rem; color:var(--dim); border-bottom: 1px solid var(--border);">
+                <span id="txt-total-items">Matches: 0</span>
+            </div>
+            <ul class="note-list" id="notes-container"></ul>
+            
+            <div class="bottom-nav">
+                <button class="btn primary" id="btn-insert" onclick="app.newNote()">[ + ADD ]</button>
+                <button class="btn" id="btn-timeline" onclick="app.navigate('timeline')">[ LOGS ]</button>
+                <button class="btn" id="btn-config" onclick="app.navigate('settings')">[ CFG ]</button>
+            </div>
+        </main>
+
+        <!-- VIEW: TIMELINE (LOGS) -->
+        <main id="view-timeline" class="view">
+            <div class="cli-prompt">
+                <span>root@nodas:~$</span> tail -f /var/log/notes.log
+            </div>
+            <div class="log-container" id="timeline-container">
+                <!-- Logs injected here -->
+            </div>
+            <div class="bottom-nav">
+                <button class="btn primary" onclick="app.goBack()">[ RETURN ]</button>
+            </div>
+        </main>
+
+        <!-- VIEW: EDITOR -->
+        <main id="view-editor" class="view">
+            <div class="editor-header">
+                <div class="input-group">
+                    <label id="lbl-filename">FILE_NAME.txt (Title)</label>
+                    <input type="text" id="edit-title" class="editor-input" placeholder="Untitled">
+                </div>
+                <div class="input-group">
+                    <label id="lbl-labels">LABELS (comma separated)</label>
+                    <input type="text" id="edit-labels" class="editor-input" placeholder="e.g. work, ideas">
+                </div>
+            </div>
+            <div class="editor-actions">
+                <button class="btn" id="btn-pin" onclick="app.togglePin()">[*] PIN</button>
+                <button class="btn danger" id="btn-delete" onclick="app.deleteCurrentNote()">[X] DELETE</button>
+            </div>
+            <textarea id="edit-content" class="editor-textarea" placeholder="Input stream..."></textarea>
+            
+            <div class="bottom-nav">
+                <button class="btn primary" id="btn-save" onclick="app.saveNote()">[ WRITE & EXIT ]</button>
+                <button class="btn" id="btn-abort" onclick="app.goBack()">[ ABORT ]</button>
+            </div>
+        </main>
+
+        <!-- VIEW: SETTINGS -->
+        <main id="view-settings" class="view">
+            <div class="cli-prompt">
+                <span>root@nodas:~$</span> ./config.sh
+            </div>
+            <div class="settings-container">
+                <div class="settings-block">
+                    <h3 id="hd-display">DISPLAY & LANG</h3>
+                    <p id="desc-display">Change terminal phosphor and machine dialect.</p>
+                    <div style="display:flex; gap:10px;">
+                        <button class="btn" onclick="app.toggleTheme()">THEME</button>
+                        <button class="btn" id="btn-lang" onclick="app.toggleLanguage()">LANG: EN</button>
+                    </div>
+                </div>
+                <div class="settings-block">
+                    <h3 id="hd-audio">AUDIO SYSTEM</h3>
+                    <button class="btn" id="btn-audio" onclick="app.toggleAudio()">AUDIO: ON</button>
+                </div>
+                <div class="settings-block">
+                    <h3 id="hd-data">DATA I/O</h3>
+                    <div style="display:flex; gap:10px;">
+                        <button class="btn primary" id="btn-export" onclick="app.exportData()">DUMP</button>
+                        <button class="btn danger" id="btn-import" onclick="document.getElementById('file-input').click()">LOAD</button>
+                        <input type="file" id="file-input" accept=".json" onchange="app.importData(event)">
+                    </div>
+                </div>
+            </div>
+            <div class="bottom-nav">
+                <button class="btn primary" id="btn-return" onclick="app.goBack()">[ RETURN ]</button>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const dict = {
+            id: {
+                totalItems: "Ditemukan: {n}",
+                dirEmpty: "0_RESULT. Query tidak cocok.",
+                btnInsert: "[ + TAMBAH ]",
+                btnTimeline: "[ LOG ]",
+                btnConfig: "[ CFG ]",
+                lblFilename: "NAMA_FILE.txt",
+                lblLabels: "LABEL (koma)",
+                btnPin: "[*] SEMAT",
+                btnUnpin: "[*] LEPAS",
+                btnDelete: "[X] HAPUS",
+                btnSave: "[ TULIS & EXIT ]",
+                btnAbort: "[ BATAL ]",
+                hdDisplay: "TAMPILAN & BAHASA",
+                descDisplay: "Ubah output fosfor dan logat mesin.",
+                hdAudio: "AUDIO SYSTEM",
+                hdData: "I/O DATA",
+                btnExport: "DUMP",
+                btnImport: "LOAD",
+                btnReturn: "[ KEMBALI ]",
+                msgSave: "SYS: Blok data ditulis.",
+                msgDelete: "SYS: Sektor dihapus.",
+                msgPin: "SYS: Index disematkan.",
+                msgUnpin: "SYS: Index dilepas.",
+                msgImportOk: "SYS: {n} blok dimuat."
+            },
+            en: {
+                totalItems: "Matches: {n}",
+                dirEmpty: "0_RESULT. No matching query.",
+                btnInsert: "[ + ADD ]",
+                btnTimeline: "[ LOGS ]",
+                btnConfig: "[ CFG ]",
+                lblFilename: "FILE_NAME.txt",
+                lblLabels: "LABELS (comma)",
+                btnPin: "[*] PIN",
+                btnUnpin: "[*] UNPIN",
+                btnDelete: "[X] DELETE",
+                btnSave: "[ WRITE & EXIT ]",
+                btnAbort: "[ ABORT ]",
+                hdDisplay: "DISPLAY & LANG",
+                descDisplay: "Change phosphor output and machine dialect.",
+                hdAudio: "AUDIO SYSTEM",
+                hdData: "DATA I/O",
+                btnExport: "DUMP",
+                btnImport: "LOAD",
+                btnReturn: "[ RETURN ]",
+                msgSave: "SYS: Data block written.",
+                msgDelete: "SYS: Sector purged.",
+                msgPin: "SYS: Index pinned.",
+                msgUnpin: "SYS: Index unpinned.",
+                msgImportOk: "SYS: {n} blocks loaded."
+            }
+        };
+
+        const app = {
+            notes: [],
+            currentNoteId: null,
+            isDarkMode: false,
+            lang: 'en',
+            audioEnabled: true,
+            audioCtx: null,
+            booted: false,
+            searchQuery: '',
+            
+            els: {}, 
+
+            init() {
+                this.cacheElements();
+                this.loadSettings();
+                this.loadData();
+                this.applyLanguage();
+                this.startBitAnimation();
+                this.setupHardwareBackButton();
+                this.setupTypingSound();
+                this.setupSearch();
+                
+                history.replaceState({ view: 'list' }, '', '#list');
+
+                const initAudio = () => {
+                    if(!this.audioCtx) this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    if(this.audioCtx.state === 'suspended') this.audioCtx.resume();
+                    document.removeEventListener('click', initAudio);
+                    document.removeEventListener('keydown', initAudio);
+                    document.removeEventListener('touchstart', initAudio);
+                };
+                document.addEventListener('click', initAudio);
+                document.addEventListener('keydown', initAudio);
+                document.addEventListener('touchstart', initAudio);
+
+                this.runBootSequence();
+            },
+
+            cacheElements() {
+                this.els = {
+                    screen: document.getElementById('screen-container'),
+                    bootScreen: document.getElementById('boot-screen'),
+                    bitAnim: document.getElementById('bit-anim'),
+                    modeInd: document.getElementById('mode-indicator'),
+                    views: document.querySelectorAll('.view'),
+                    notesContainer: document.getElementById('notes-container'),
+                    timelineContainer: document.getElementById('timeline-container'),
+                    searchInput: document.getElementById('search-input'),
+                    editTitle: document.getElementById('edit-title'),
+                    editLabels: document.getElementById('edit-labels'),
+                    editContent: document.getElementById('edit-content'),
+                    btnPin: document.getElementById('btn-pin'),
+                    sysMsgContainer: document.getElementById('sys-msg-container')
+                };
+            },
+
+            formatTime(ms) {
+                const d = new Date(ms);
+                const pad = n => n.toString().padStart(2, '0');
+                return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+            },
+
+            runBootSequence() {
+                const bootLines = [
+                    "NODAS KERNEL v4.0 PURE_LOGIC",
+                    "CPU: ARM v8",
+                    "Mounting /dev/localstorage... [OK]",
+                    "Initializing Audio Synth... [OK]",
+                    "Enabling Instant Redraw CRT... [OK]",
+                    "Loading System GUI..."
+                ];
+                
+                let i = 0;
+                const interval = setInterval(() => {
+                    if (i < bootLines.length) {
+                        const line = document.createElement('div');
+                        line.className = 'boot-line';
+                        line.innerText = bootLines[i];
+                        this.els.bootScreen.appendChild(line);
+                        this.playTone('type');
+                        i++;
+                    } else {
+                        clearInterval(interval);
+                        setTimeout(() => {
+                            this.els.bootScreen.style.display = 'none';
+                            this.booted = true;
+                            this.playTone('success');
+                            this.showView('list');
+                        }, 200);
+                    }
+                }, 100);
+            },
+
+            playTone(type) {
+                if (!this.audioEnabled || !this.audioCtx) return;
+                const osc = this.audioCtx.createOscillator();
+                const gain = this.audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(this.audioCtx.destination);
+                const now = this.audioCtx.currentTime;
+
+                if (type === 'click') {
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(600, now);
+                    osc.frequency.exponentialRampToValueAtTime(50, now + 0.04);
+                    gain.gain.setValueAtTime(0.08, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+                    osc.start(now); osc.stop(now + 0.04);
+                } else if (type === 'type') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(200 + Math.random()*100, now);
+                    gain.gain.setValueAtTime(0.03, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
+                    osc.start(now); osc.stop(now + 0.03);
+                } else if (type === 'success') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(500, now);
+                    osc.frequency.linearRampToValueAtTime(1200, now + 0.15);
+                    gain.gain.setValueAtTime(0.05, now);
+                    gain.gain.linearRampToValueAtTime(0, now + 0.15);
+                    osc.start(now); osc.stop(now + 0.15);
+                } else if (type === 'error' || type === 'delete') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(150, now);
+                    osc.frequency.exponentialRampToValueAtTime(20, now + 0.2);
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                    osc.start(now); osc.stop(now + 0.2);
+                }
+            },
+
+            setupTypingSound() {
+                const playType = () => this.playTone('type');
+                this.els.searchInput.addEventListener('input', playType);
+                this.els.editTitle.addEventListener('input', playType);
+                this.els.editLabels.addEventListener('input', playType);
+                this.els.editContent.addEventListener('input', playType);
+            },
+
+            setupSearch() {
+                this.els.searchInput.addEventListener('input', (e) => {
+                    this.searchQuery = e.target.value.toLowerCase();
+                    this.renderNotes();
+                });
+            },
+
+            sysMsg(text) {
+                const msg = document.createElement('div');
+                msg.className = 'sys-msg';
+                this.els.sysMsgContainer.prepend(msg);
+                if (this.els.sysMsgContainer.children.length > 3) this.els.sysMsgContainer.lastChild.remove();
+
+                let i = 0; msg.innerText = '';
+                const typeInterval = setInterval(() => {
+                    if (i < text.length) { msg.innerText += text.charAt(i); i++; } 
+                    else {
+                        clearInterval(typeInterval);
+                        setTimeout(() => { msg.style.opacity = '0'; setTimeout(() => msg.remove(), 200); }, 2000);
+                    }
+                }, 15);
+            },
+
+            loadSettings() {
+                this.setTheme(localStorage.getItem('nodas_theme') === 'dark');
+                const savedLang = localStorage.getItem('nodas_lang');
+                if (savedLang) this.lang = savedLang;
+                const savedAudio = localStorage.getItem('nodas_audio');
+                if (savedAudio !== null) this.audioEnabled = savedAudio === 'true';
+            },
+
+            loadData() {
+                try {
+                    const data = localStorage.getItem('nodas_db');
+                    if (data) this.notes = JSON.parse(data);
+                } catch (e) { this.notes = []; }
+            },
+
+            saveData() { localStorage.setItem('nodas_db', JSON.stringify(this.notes)); },
+
+            t(key, params = {}) {
+                let text = dict[this.lang][key] || key;
+                for (let p in params) text = text.replace(`{${p}}`, params[p]);
+                return text;
+            },
+
+            applyLanguage() {
+                document.getElementById('btn-insert').innerText = this.t('btnInsert');
+                document.getElementById('btn-timeline').innerText = this.t('btnTimeline');
+                document.getElementById('btn-config').innerText = this.t('btnConfig');
+                document.getElementById('lbl-filename').innerText = this.t('lblFilename');
+                document.getElementById('lbl-labels').innerText = this.t('lblLabels');
+                document.getElementById('btn-delete').innerText = this.t('btnDelete');
+                document.getElementById('btn-save').innerText = this.t('btnSave');
+                document.getElementById('btn-abort').innerText = this.t('btnAbort');
+                document.getElementById('hd-display').innerText = this.t('hdDisplay');
+                document.getElementById('desc-display').innerText = this.t('descDisplay');
+                document.getElementById('hd-audio').innerText = this.t('hdAudio');
+                document.getElementById('hd-data').innerText = this.t('hdData');
+                document.getElementById('btn-export').innerText = this.t('btnExport');
+                document.getElementById('btn-import').innerText = this.t('btnImport');
+                document.getElementById('btn-return').innerText = this.t('btnReturn');
+                
+                document.getElementById('btn-lang').innerText = `LANG: ${this.lang.toUpperCase()}`;
+                document.getElementById('btn-audio').innerText = `AUDIO: ${this.audioEnabled ? 'ON' : 'OFF'}`;
+
+                if (this.currentNoteId) {
+                    const note = this.notes.find(n => n.id === this.currentNoteId);
+                    this.els.btnPin.innerText = (note && note.pinned) ? this.t('btnUnpin') : this.t('btnPin');
+                } else {
+                    this.els.btnPin.innerText = this.t('btnPin');
+                }
+                this.renderNotes(); // update total items text
+            },
+
+            toggleLanguage() {
+                this.playTone('click');
+                this.lang = this.lang === 'id' ? 'en' : 'id';
+                localStorage.setItem('nodas_lang', this.lang);
+                this.applyLanguage();
+            },
+
+            toggleAudio() {
+                this.audioEnabled = !this.audioEnabled;
+                localStorage.setItem('nodas_audio', this.audioEnabled);
+                this.applyLanguage();
+                this.playTone('click');
+            },
+
+            toggleTheme() {
+                this.playTone('click');
+                this.setTheme(!this.isDarkMode);
+                this.screenRedraw(true); 
+            },
+
+            setTheme(isDark) {
+                this.isDarkMode = isDark;
+                if (isDark) {
+                    document.body.classList.add('dark-mode');
+                    this.els.modeInd.innerText = '[DRK]';
+                    localStorage.setItem('nodas_theme', 'dark');
+                } else {
+                    document.body.classList.remove('dark-mode');
+                    this.els.modeInd.innerText = '[LGT]';
+                    localStorage.setItem('nodas_theme', 'light');
+                }
+            },
+
+            startBitAnimation() {
+                setInterval(() => {
+                    let bits = '';
+                    for(let i=0; i<8; i++) bits += Math.random() > 0.5 ? '1' : '0';
+                    this.els.bitAnim.innerText = bits;
+                }, 80);
+            },
+
+            screenRedraw(isHard = false) {
+                const el = this.els.screen;
+                const animClass = isHard ? 'glitch-hard' : 'redraw-anim';
+                el.classList.remove(animClass); 
+                void el.offsetWidth; 
+                el.classList.add(animClass);
+                setTimeout(() => el.classList.remove(animClass), isHard ? 200 : 100);
+            },
+
+            navigate(viewId) {
+                this.playTone('click');
+                history.pushState({ view: viewId }, '', `#${viewId}`);
+                this.showView(viewId);
+            },
+
+            goBack() {
+                this.playTone('click');
+                window.history.back();
+            },
+
+            setupHardwareBackButton() {
+                window.addEventListener('popstate', (event) => {
+                    if (event.state && event.state.view) this.showView(event.state.view);
+                    else if (this.booted) this.showView('list');
+                });
+            },
+
+            showView(viewId) {
+                if(!this.booted) return;
+                
+                // INSTANT REDRAW LOGIC
+                this.els.views.forEach(v => v.classList.remove('active'));
+                document.getElementById(`view-${viewId}`).classList.add('active');
+                
+                this.screenRedraw(); // Brief CRT flicker on switch
+                
+                if (viewId === 'list') {
+                    this.renderNotes();
+                    this.els.searchInput.focus();
+                } else if (viewId === 'timeline') {
+                    this.renderTimeline();
+                } else if (viewId === 'editor') {
+                    this.els.editContent.focus(); 
+                }
+            },
+
+            renderNotes() {
+                this.els.notesContainer.innerHTML = '';
+                
+                let filteredNotes = this.notes;
+                if (this.searchQuery) {
+                    filteredNotes = this.notes.filter(n => 
+                        (n.title && n.title.toLowerCase().includes(this.searchQuery)) ||
+                        (n.content && n.content.toLowerCase().includes(this.searchQuery)) ||
+                        n.labels.some(l => l.toLowerCase().includes(this.searchQuery))
+                    );
+                }
+
+                const sortedNotes = [...filteredNotes].sort((a, b) => {
+                    if (a.pinned !== b.pinned) return b.pinned - a.pinned;
+                    return b.updatedAt - a.updatedAt;
+                });
+
+                document.getElementById('txt-total-items').innerText = this.t('totalItems', {n: sortedNotes.length});
+
+                if (sortedNotes.length === 0) {
+                    this.els.notesContainer.innerHTML = `<li style="padding:16px; color:var(--dim)">${this.t('dirEmpty')}</li>`;
+                    return;
+                }
+
+                sortedNotes.forEach(note => {
+                    const dateStr = this.formatTime(note.updatedAt);
+                    const labelsHtml = note.labels.length > 0 ? `[${note.labels.join('] [')}]` : '';
+                    const pinHtml = note.pinned ? `<span class="pin-badge">PIN</span>` : '';
+                    
+                    const li = document.createElement('li');
+                    li.className = 'note-item';
+                    li.onclick = () => this.openEditor(note.id);
+                    li.innerHTML = `
+                        <div class="note-meta">${pinHtml} ${dateStr}</div>
+                        <div class="note-title">${note.title || 'unnamed_file.txt'}</div>
+                        <div class="note-tags">${labelsHtml}</div>
+                    `;
+                    this.els.notesContainer.appendChild(li);
+                });
+            },
+
+            renderTimeline() {
+                this.els.timelineContainer.innerHTML = '';
+                // Sort absolute chronological (newest first)
+                const timelineNotes = [...this.notes].sort((a, b) => b.updatedAt - a.updatedAt);
+                
+                if (timelineNotes.length === 0) {
+                    this.els.timelineContainer.innerHTML = '<div>No logs found.</div>';
+                    return;
+                }
+
+                timelineNotes.forEach(note => {
+                    const time = this.formatTime(note.updatedAt);
+                    const labelStr = note.labels.length > 0 ? ` <span class="log-label">[${note.labels.join(',')}]</span>` : '';
+                    const pinStr = note.pinned ? ` <span style="color:var(--bg); background:var(--fg);">[PIN]</span>` : '';
+                    
+                    const div = document.createElement('div');
+                    div.className = 'log-entry';
+                    div.innerHTML = `
+                        <span class="log-time">[${time}]</span>${pinStr}${labelStr} 
+                        SYS_WRITE: <span class="log-title" onclick="app.openEditor('${note.id}')">${note.title || 'unnamed'}</span>
+                    `;
+                    this.els.timelineContainer.appendChild(div);
+                });
+            },
+
+            newNote() {
+                this.currentNoteId = null;
+                this.els.editTitle.value = '';
+                this.els.editLabels.value = '';
+                this.els.editContent.value = '';
+                this.els.btnPin.innerText = this.t('btnPin');
+                this.navigate('editor');
+            },
+
+            openEditor(id) {
+                const note = this.notes.find(n => n.id === id);
+                if (!note) return;
+                this.currentNoteId = id;
+                this.els.editTitle.value = note.title;
+                this.els.editLabels.value = note.labels.join(', ');
+                this.els.editContent.value = note.content;
+                this.els.btnPin.innerText = note.pinned ? this.t('btnUnpin') : this.t('btnPin');
+                this.navigate('editor');
+            },
+
+            saveNote() {
+                const title = this.els.editTitle.value.trim();
+                const content = this.els.editContent.value.trim();
+                const labels = this.els.editLabels.value.trim() ? this.els.editLabels.value.trim().split(',').map(l => l.trim()).filter(l => l) : [];
+
+                if (!title && !content) { this.goBack(); return; }
+
+                const isPinned = this.els.btnPin.innerText === this.t('btnUnpin');
+
+                if (this.currentNoteId) {
+                    const idx = this.notes.findIndex(n => n.id === this.currentNoteId);
+                    if (idx > -1) this.notes[idx] = { ...this.notes[idx], title, content, labels, pinned: isPinned, updatedAt: Date.now() };
+                } else {
+                    this.notes.push({
+                        id: 'nodas_' + Date.now().toString(36),
+                        title, content, labels, pinned: isPinned,
+                        createdAt: Date.now(), updatedAt: Date.now()
+                    });
+                }
+                this.saveData();
+                this.playTone('success');
+                this.sysMsg(this.t('msgSave'));
+                this.screenRedraw(true);
+                setTimeout(() => this.goBack(), 100); 
+            },
+
+            togglePin() {
+                this.playTone('click');
+                if (this.els.btnPin.innerText === this.t('btnUnpin')) {
+                    this.els.btnPin.innerText = this.t('btnPin');
+                    this.sysMsg(this.t('msgUnpin'));
+                } else {
+                    this.els.btnPin.innerText = this.t('btnUnpin');
+                    this.sysMsg(this.t('msgPin'));
+                }
+                this.screenRedraw();
+            },
+
+            deleteCurrentNote() {
+                if (!this.currentNoteId) { this.goBack(); return; }
+                this.notes = this.notes.filter(n => n.id !== this.currentNoteId);
+                this.saveData();
+                this.playTone('delete');
+                this.sysMsg(this.t('msgDelete'));
+                this.screenRedraw(true);
+                setTimeout(() => this.goBack(), 100);
+            },
+
+            exportData() {
+                this.playTone('click');
+                if (this.notes.length === 0) return;
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(this.notes));
+                const a = document.createElement('a');
+                a.setAttribute("href", dataStr);
+                a.setAttribute("download", "nodas_sys_dump_" + Date.now() + ".json");
+                document.body.appendChild(a); a.click(); a.remove();
+                this.sysMsg("SYS: Memory dumped.");
+            },
+
+            importData(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const imported = JSON.parse(e.target.result);
+                        if (Array.isArray(imported)) {
+                            const existingIds = new Set(this.notes.map(n => n.id));
+                            let added = 0;
+                            imported.forEach(note => {
+                                if(note.id && !existingIds.has(note.id)) { this.notes.push(note); added++; }
+                            });
+                            this.saveData();
+                            this.playTone('success');
+                            this.sysMsg(this.t('msgImportOk', {n: added}));
+                            this.screenRedraw(true);
+                        } else throw new Error("Format error");
+                    } catch (err) {
+                        this.playTone('error');
+                        this.sysMsg("ERR: JSON integrity check failed.");
+                    }
+                    event.target.value = ''; 
+                };
+                reader.readAsText(file);
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', () => app.init());
+    </script>
+</body>
+</html>

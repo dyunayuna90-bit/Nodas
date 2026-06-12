@@ -210,24 +210,30 @@ body {
 /* No more smooth turn-on animations. Pure instant draw. */
 .view.active { display: flex; }
 
-/* EDITOR VIEW — controlled entirely by JS visualViewport.
-   The #view-editor div is set to position:fixed with dynamic
-   height/top from JS, so it always fits exactly the visible area
-   above the keyboard. We use display:flex on it directly. */
+/* EDITOR OVERLAY — rendered outside #screen-container so position:fixed
+   is never trapped by container's overflow:hidden or filter/transform effects.
+   JS sets height and top from visualViewport so it always fills the visible
+   area above the keyboard exactly. Toolbar at the bottom naturally floats
+   right above the keyboard. */
 #view-editor {
-    position: fixed !important;
-    left: 0;
-    width: 100%;
     display: none;
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
     flex-direction: column;
     overflow: hidden;
-    /* transition for smooth keyboard appear/disappear */
-    transition: height 0.1s ease-out, top 0.1s ease-out;
-    /* z-index above other views */
-    z-index: 100;
     background: var(--bg);
-    /* override .view padding-bottom since we manage layout ourselves */
-    padding-bottom: 0 !important;
+    z-index: 200;
+    font-family: 'Courier New', Courier, monospace;
+    color: var(--fg);
+    text-shadow: var(--phosphor);
+    transition: height 0.1s ease-out, top 0.1s ease-out;
+    /* safe-area padding mirrors screen-container */
+    padding-top: calc(env(safe-area-inset-top, 0px) + 36px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
 }
 #view-editor.active {
     display: flex;
@@ -423,11 +429,25 @@ body {
     padding: 4px 0 2px;
     border-top: 1px dotted var(--dim);
 }
-.editor-actions-inline .btn-sm {
+/* btn-sm: compact version of .btn for inside the editor header */
+.btn-sm {
     flex: 1;
-    padding: 7px 4px;
-    font-size: 0.75rem;
+    background: transparent;
+    color: var(--fg);
+    border: 1px solid var(--border);
+    padding: 8px 4px;
+    font-family: 'Courier New', Courier, monospace;
+    font-weight: bold;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    cursor: pointer;
+    text-shadow: var(--phosphor);
+    white-space: nowrap;
 }
+.btn-sm:active { background: var(--fg); color: var(--bg); text-shadow: none; border-color: var(--fg); }
+.btn-sm.primary { border: 2px solid var(--fg); }
+.btn-sm.danger { border-color: var(--accent); color: var(--accent); }
+.btn-sm.danger:active { background: var(--accent); color: var(--bg); }
 
 /* SCROLLABLE CONTENT AREA */
 .editor-scroll {

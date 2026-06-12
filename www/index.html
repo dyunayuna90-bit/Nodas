@@ -69,58 +69,6 @@
             </div>
         </main>
 
-        <!-- VIEW: EDITOR -->
-        <!-- Editor uses visualViewport JS to shrink dynamically when keyboard opens,
-             so the toolbar always sits exactly above the keyboard. -->
-        <div id="view-editor" class="view" style="display:none;">
-            <div class="editor-header" id="editor-header">
-                <div class="input-group">
-                    <label id="lbl-filename">FILE_NAME.txt (Title)</label>
-                    <input type="text" id="edit-title" class="editor-input" placeholder="Untitled">
-                </div>
-                <div class="input-group">
-                    <label id="lbl-labels">LABELS (comma separated)</label>
-                    <input type="text" id="edit-labels" class="editor-input" placeholder="e.g. work, ideas">
-                </div>
-                <div class="editor-actions-inline">
-                    <button class="btn btn-sm" id="btn-pin" onclick="app.togglePin()">[*] PIN</button>
-                    <button class="btn btn-sm danger" id="btn-delete" onclick="app.deleteCurrentNote()">[X] DEL</button>
-                    <button class="btn btn-sm primary" id="btn-save" onclick="app.saveNote()">[ SAVE ]</button>
-                    <button class="btn btn-sm" id="btn-abort" onclick="app.abortEdit()">[ ABORT ]</button>
-                </div>
-            </div>
-
-            <!-- Scrollable content area -->
-            <div id="editor-scroll" class="editor-scroll">
-                <div
-                    id="edit-content"
-                    class="editor-contenteditable"
-                    contenteditable="true"
-                    spellcheck="false"
-                    autocorrect="off"
-                    autocapitalize="sentences"
-                    data-placeholder="Input stream..."
-                ></div>
-            </div>
-
-            <!-- Format Toolbar — always above keyboard -->
-            <div id="editor-toolbar" class="editor-toolbar">
-                <!-- Text size -->
-                <button class="tb-btn" onclick="app.formatDoc('fontSize', '3')" title="Normal">A</button>
-                <button class="tb-btn tb-h2" onclick="app.formatDoc('formatBlock', 'h2')" title="H2">H2</button>
-                <button class="tb-btn tb-h1" onclick="app.formatDoc('formatBlock', 'h1')" title="H1">H1</button>
-                <div class="tb-sep"></div>
-                <!-- Alignment -->
-                <button class="tb-btn" onclick="app.formatDoc('justifyLeft')" title="Left">&#8676;</button>
-                <button class="tb-btn" onclick="app.formatDoc('justifyCenter')" title="Center">&#8596;</button>
-                <button class="tb-btn" onclick="app.formatDoc('justifyRight')" title="Right">&#8677;</button>
-                <div class="tb-sep"></div>
-                <!-- Undo/Redo -->
-                <button class="tb-btn" onclick="document.execCommand('undo')" title="Undo">&#8630;</button>
-                <button class="tb-btn" onclick="document.execCommand('redo')" title="Redo">&#8631;</button>
-            </div>
-        </div>
-
         <!-- VIEW: SETTINGS -->
         <main id="view-settings" class="view">
             <div class="cli-prompt" style="cursor:default;">
@@ -156,5 +104,54 @@
 
     <script src="js/config.js"></script>
     <script src="js/app.js"></script>
+
+    <!-- EDITOR OVERLAY — lives outside #screen-container so position:fixed
+         is not trapped by the container's overflow:hidden or filter effects.
+         JS visualViewport resizes it dynamically so toolbar stays above keyboard. -->
+    <div id="view-editor" class="view">
+        <div class="editor-header" id="editor-header">
+            <div class="input-group">
+                <label id="lbl-filename">FILE_NAME.txt (Title)</label>
+                <input type="text" id="edit-title" class="editor-input" placeholder="Untitled">
+            </div>
+            <div class="input-group">
+                <label id="lbl-labels">LABELS (comma separated)</label>
+                <input type="text" id="edit-labels" class="editor-input" placeholder="e.g. work, ideas">
+            </div>
+            <div class="editor-actions-inline">
+                <button class="btn-sm" id="btn-pin" onclick="app.togglePin()">[*] PIN</button>
+                <button class="btn-sm danger" id="btn-delete" onclick="app.deleteCurrentNote()">[X] DEL</button>
+                <button class="btn-sm primary" id="btn-save" onclick="app.saveNote()">[ SAVE ]</button>
+                <button class="btn-sm" id="btn-abort" onclick="app.abortEdit()">[ ABORT ]</button>
+            </div>
+        </div>
+
+        <!-- Scrollable content area -->
+        <div id="editor-scroll" class="editor-scroll">
+            <div
+                id="edit-content"
+                class="editor-contenteditable"
+                contenteditable="true"
+                spellcheck="false"
+                autocorrect="off"
+                autocapitalize="sentences"
+                data-placeholder="Input stream..."
+            ></div>
+        </div>
+
+        <!-- Format Toolbar — always above keyboard -->
+        <div id="editor-toolbar" class="editor-toolbar">
+            <button class="tb-btn" onclick="app.formatDoc('fontSize', '3')" title="Normal">A</button>
+            <button class="tb-btn tb-h2" onclick="app.formatDoc('formatBlock', 'h2')" title="H2">H2</button>
+            <button class="tb-btn tb-h1" onclick="app.formatDoc('formatBlock', 'h1')" title="H1">H1</button>
+            <div class="tb-sep"></div>
+            <button class="tb-btn" onclick="app.formatDoc('justifyLeft')" title="Left">&#8676;</button>
+            <button class="tb-btn" onclick="app.formatDoc('justifyCenter')" title="Center">&#8596;</button>
+            <button class="tb-btn" onclick="app.formatDoc('justifyRight')" title="Right">&#8677;</button>
+            <div class="tb-sep"></div>
+            <button class="tb-btn" onclick="document.execCommand('undo')" title="Undo">&#8630;</button>
+            <button class="tb-btn" onclick="document.execCommand('redo')" title="Redo">&#8631;</button>
+        </div>
+    </div>
 </body>
 </html>

@@ -78,7 +78,7 @@ body {
        An extra fixed buffer is added on top of the safe-area inset because
        on many devices the front camera cutout sits below where the OS
        reports the safe area, and would otherwise overlap the header. */
-    padding-top: calc(env(safe-area-inset-top, 0px) + 14px);
+    padding-top: calc(env(safe-area-inset-top, 0px) + 36px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
     padding-left: env(safe-area-inset-left, 0px);
     padding-right: env(safe-area-inset-right, 0px);
@@ -338,14 +338,16 @@ body {
 
 /* BOTTOM NAV */
 .bottom-nav {
-    position: absolute;
-    bottom: 0; left: 0; right: 0;
+    position: fixed;
+    bottom: env(safe-area-inset-bottom, 0px);
+    left: env(safe-area-inset-left, 0px);
+    right: env(safe-area-inset-right, 0px);
     background: var(--bg);
     border-top: 2px solid var(--border);
     display: flex;
     padding: 8px 12px;
     gap: 8px;
-    z-index: 100;
+    z-index: 5000;
 }
 .btn {
     flex: 1;

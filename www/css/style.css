@@ -210,33 +210,16 @@ body {
 /* No more smooth turn-on animations. Pure instant draw. */
 .view.active { display: flex; }
 
-/* EDITOR OVERLAY — rendered outside #screen-container so position:fixed
-   is never trapped by container's overflow:hidden or filter/transform effects.
-   JS sets height and top from visualViewport so it always fills the visible
-   area above the keyboard exactly. Toolbar at the bottom naturally floats
-   right above the keyboard. */
-#view-editor {
-    display: none;
-    position: fixed;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    flex-direction: column;
-    overflow: hidden;
-    background: var(--bg);
-    z-index: 200;
-    font-family: 'Courier New', Courier, monospace;
-    color: var(--fg);
-    text-shadow: var(--phosphor);
-    transition: height 0.1s ease-out, top 0.1s ease-out;
-    /* safe-area padding mirrors screen-container */
-    padding-top: calc(env(safe-area-inset-top, 0px) + 36px);
-    padding-left: env(safe-area-inset-left, 0px);
-    padding-right: env(safe-area-inset-right, 0px);
-}
+/* EDITOR VIEW
+   Dengan Capacitor Keyboard resize:"native", WebView dikecilkan oleh OS
+   saat keyboard muncul — persis seperti browser native. Jadi cukup:
+   - #view-editor  : height 100% (ikut WebView yang sudah dikecilkan)
+   - editor-textarea : flex:1, overflow-y:auto (scroll sendiri)
+   - .bottom-nav   : position:fixed bottom:0 (otomatis naik karena viewport mengecil)
+   Tidak perlu JS keyboard height tracking sama sekali. */
 #view-editor.active {
-    display: flex;
+    overflow-y: hidden;
+    height: 100%;
 }
 
 /* SEARCH / GREP PROMPT (COLLAPSIBLE — tap to activate) */
@@ -396,166 +379,42 @@ body {
 .btn.danger { border-color: var(--accent); color: var(--accent); }
 .btn.danger:active { background: var(--accent); color: var(--bg); }
 
-/* EDITOR HEADER — fixed, non-scrolling */
-.editor-header { 
-    flex-shrink: 0;
-    padding: 12px 16px; 
-    display: flex; 
-    flex-direction: column; 
-    gap: 10px; 
-    border-bottom: 1px dotted var(--dim);
-    background: var(--bg);
-}
+/* EDITOR VIEW */
+.editor-header { padding: 16px; display: flex; flex-direction: column; gap: 12px; border-bottom: 1px dotted var(--dim); }
 .input-group { display: flex; flex-direction: column; }
 .input-group label { font-size: 0.8rem; color: var(--dim); margin-bottom: 4px; }
-.editor-input {
+
+.editor-input, .editor-textarea {
     background: transparent;
     border: none;
-    border-bottom: 1px solid var(--dim);
     color: var(--fg);
-    font-size: 1.05rem;
+    font-size: 1.1rem;
     outline: none;
     width: 100%;
     text-shadow: var(--phosphor);
     caret-color: var(--fg);
-    padding-bottom: 4px;
+    caret-shape: block;
 }
-.editor-input::placeholder { color: var(--dim); opacity: 0.4; }
-.editor-actions-inline {
-    flex-shrink: 0;
-    display: flex;
-    gap: 6px;
-    overflow-x: auto;
-    padding: 4px 0 2px;
-    border-top: 1px dotted var(--dim);
-}
-/* btn-sm: compact version of .btn for inside the editor header */
-.btn-sm {
-    flex: 1;
-    background: transparent;
-    color: var(--fg);
-    border: 1px solid var(--border);
-    padding: 8px 4px;
-    font-family: 'Courier New', Courier, monospace;
-    font-weight: bold;
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    cursor: pointer;
-    text-shadow: var(--phosphor);
-    white-space: nowrap;
-}
-.btn-sm:active { background: var(--fg); color: var(--bg); text-shadow: none; border-color: var(--fg); }
-.btn-sm.primary { border: 2px solid var(--fg); }
-.btn-sm.danger { border-color: var(--accent); color: var(--accent); }
-.btn-sm.danger:active { background: var(--accent); color: var(--bg); }
-
-/* SCROLLABLE CONTENT AREA */
-.editor-scroll {
+.editor-input { border-bottom: 1px solid var(--dim); padding-bottom: 4px; }
+.editor-input::placeholder, .editor-textarea::placeholder { color: var(--dim); opacity: 0.4; }
+.editor-header { flex-shrink: 0; }
+.editor-actions { flex-shrink: 0; }
+.editor-textarea {
     flex: 1;
     min-height: 0;
+    padding: 16px;
+    resize: none;
+    line-height: 1.6;
     overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    background: var(--bg);
+    /* Beri ruang di bawah supaya baris terakhir tidak tertutup bottom-nav.
+       64px = tinggi .bottom-nav. Dengan resize:"native" di Capacitor,
+       viewport sudah dikecilkan oleh OS saat keyboard muncul, jadi
+       tidak perlu tambahan keyboard height di sini. */
+    padding-bottom: calc(16px + 64px);
+    scroll-padding-bottom: calc(16px + 64px);
 }
-
-/* CONTENTEDITABLE AREA */
-.editor-contenteditable {
-    min-height: 100%;
-    padding: 16px 16px 40px;
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 1.05rem;
-    line-height: 1.7;
-    color: var(--fg);
-    text-shadow: var(--phosphor);
-    outline: none;
-    caret-color: var(--fg);
-    word-wrap: break-word;
-    white-space: pre-wrap;
-    -webkit-user-select: text !important;
-    user-select: text !important;
-}
-.editor-contenteditable:empty::before {
-    content: attr(data-placeholder);
-    color: var(--dim);
-    opacity: 0.4;
-    pointer-events: none;
-}
-.editor-contenteditable h1 {
-    font-size: 1.6rem;
-    font-weight: bold;
-    margin: 8px 0 4px;
-    color: var(--accent);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    border-bottom: 1px solid var(--dim);
-    padding-bottom: 4px;
-}
-.editor-contenteditable h2 {
-    font-size: 1.25rem;
-    font-weight: bold;
-    margin: 6px 0 2px;
-    color: var(--fg);
-    letter-spacing: 1px;
-}
-.editor-contenteditable p, .editor-contenteditable div {
-    margin: 2px 0;
-}
-
-/* FORMAT TOOLBAR — sits at the very bottom of the editor container,
-   naturally above the keyboard because the container height = visualViewport.height */
-.editor-toolbar {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    padding: 6px 10px;
-    background: var(--bg);
-    border-top: 2px solid var(--border);
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-}
-.tb-btn {
-    flex-shrink: 0;
-    background: transparent;
-    border: 1px solid var(--dim);
-    color: var(--fg);
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 0.85rem;
-    font-weight: bold;
-    padding: 7px 11px;
-    cursor: pointer;
-    text-shadow: var(--phosphor);
-    letter-spacing: 0.5px;
-    transition: background 0.05s, color 0.05s;
-    min-width: 36px;
-    text-align: center;
-}
-.tb-btn:active {
-    background: var(--fg);
-    color: var(--bg);
-    text-shadow: none;
-}
-.tb-h1 {
-    font-size: 1rem;
-    border-color: var(--accent);
-    color: var(--accent);
-}
-.tb-h1:active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
-.tb-h2 {
-    font-size: 0.9rem;
-    border-color: var(--fg);
-}
-.tb-sep {
-    width: 1px;
-    height: 24px;
-    background: var(--dim);
-    flex-shrink: 0;
-    margin: 0 4px;
-    opacity: 0.4;
-}
-
-/* Hide bottom-nav inside editor — editor manages its own action row */
-#view-editor .bottom-nav { display: none !important; }
+.editor-actions { display: flex; gap: 8px; overflow-x: auto; padding: 10px 16px; border-bottom: 1px dotted var(--dim); }
+.editor-actions .btn { flex: none; padding: 8px 16px; font-size: 0.8rem; }
 
 /* SETTINGS VIEW */
 .settings-container { padding: 16px; display: flex; flex-direction: column; gap: 20px; }
@@ -584,7 +443,7 @@ body {
 ::-webkit-scrollbar-track { background: var(--bg); border-left: 1px solid var(--dim); }
 ::-webkit-scrollbar-thumb { background: var(--fg); }
 
-/* (keyboard-aware editor bottom-nav handled in editor block above) */
+/* (keyboard avoidance handled natively via Capacitor resize:"native") */
 
 #file-input { display: none; }
 

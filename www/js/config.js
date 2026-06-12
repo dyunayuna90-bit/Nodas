@@ -27,7 +27,22 @@ const dict = {
         msgPin: "SYS: Index disematkan.",
         msgUnpin: "SYS: Index dilepas.",
         msgImportOk: "SYS: {n} blok dimuat.",
-        searchHint: "ketuk untuk grep..."
+        searchHint: "ketuk untuk grep...",
+        msgAutoSave: "SYS: Auto-save terpicu.",
+        delConfirmTitle: "// KONFIRMASI PURGE //",
+        delConfirmBody: "Tindakan ini akan menghapus sektor data secara permanen dan tidak dapat dibatalkan.",
+        delConfirmInstruction: 'Ketik "ok" di bawah untuk melanjutkan:',
+        delConfirmPlaceholder: 'ketik ok...',
+        delConfirmBtn: "[ EKSEKUSI ]",
+        delCancelBtn: "[ BATAL ]",
+        delConfirmError: "ERR: Konfirmasi tidak cocok.",
+        logCreated: "FILE_CREATE",
+        logEdited: "FILE_WRITE",
+        logOpened: "FILE_READ",
+        logDeleted: "FILE_PURGE",
+        logPinned: "FLAG_SET +PIN",
+        logUnpinned: "FLAG_CLR -PIN",
+        logEmpty: "0_ENTRIES. Belum ada aktivitas tercatat."
     },
     en: {
         totalItems: "Matches: {n}",
@@ -54,7 +69,22 @@ const dict = {
         msgPin: "SYS: Index pinned.",
         msgUnpin: "SYS: Index unpinned.",
         msgImportOk: "SYS: {n} blocks loaded.",
-        searchHint: "tap to grep..."
+        searchHint: "tap to grep...",
+        msgAutoSave: "SYS: Auto-save triggered.",
+        delConfirmTitle: "// PURGE CONFIRMATION //",
+        delConfirmBody: "This action will permanently erase this data sector. This cannot be undone.",
+        delConfirmInstruction: 'Type "ok" below to proceed:',
+        delConfirmPlaceholder: 'type ok...',
+        delConfirmBtn: "[ EXECUTE ]",
+        delCancelBtn: "[ CANCEL ]",
+        delConfirmError: "ERR: Confirmation mismatch.",
+        logCreated: "FILE_CREATE",
+        logEdited: "FILE_WRITE",
+        logOpened: "FILE_READ",
+        logDeleted: "FILE_PURGE",
+        logPinned: "FLAG_SET +PIN",
+        logUnpinned: "FLAG_CLR -PIN",
+        logEmpty: "0_ENTRIES. No activity recorded yet."
     }
 };
 

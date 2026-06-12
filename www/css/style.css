@@ -2,6 +2,7 @@
  * No BS smooth animations. Instant redraw.
  */
 :root {
+    --kb-height: 0px;
     /* LIGHT MODE (Amber / Putih Gading Vintage) */
     --bg: #e6e6dc;
     --fg: #2b2b2b;
@@ -210,6 +211,16 @@ body {
 /* No more smooth turn-on animations. Pure instant draw. */
 .view.active { display: flex; }
 
+/* EDITOR VIEW gets a fixed-height flex layout instead of whole-page
+   scrolling: header/actions are fixed-size, the textarea is the single
+   scrollable region (flex:1, min-height:0). This lets the BROWSER'S
+   NATIVE caret-follow scrolling keep the cursor visible above the
+   keyboard, with zero per-keystroke JS. */
+#view-editor.active {
+    overflow-y: hidden;
+    height: 100%;
+}
+
 /* SEARCH / GREP PROMPT (COLLAPSIBLE — tap to activate) */
 .cli-prompt {
     padding: 16px;
@@ -385,7 +396,23 @@ body {
 }
 .editor-input { border-bottom: 1px solid var(--dim); padding-bottom: 4px; }
 .editor-input::placeholder, .editor-textarea::placeholder { color: var(--dim); opacity: 0.4; }
-.editor-textarea { flex: 1; padding: 16px; resize: none; line-height: 1.6; min-height: 50vh; }
+.editor-header { flex-shrink: 0; }
+.editor-actions { flex-shrink: 0; }
+.editor-textarea {
+    flex: 1;
+    min-height: 0;
+    padding: 16px;
+    resize: none;
+    line-height: 1.6;
+    overflow-y: auto;
+    /* Reserve space at the bottom equal to the fixed bottom-nav height
+       plus the live keyboard height, so the last visible line of text
+       (and the caret) never sits underneath either of them. The browser's
+       native "scroll caret into view while typing" behavior then does the
+       rest automatically. */
+    padding-bottom: calc(16px + 64px + var(--kb-height));
+    scroll-padding-bottom: calc(16px + 64px + var(--kb-height));
+}
 .editor-actions { display: flex; gap: 8px; overflow-x: auto; padding: 10px 16px; border-bottom: 1px dotted var(--dim); }
 .editor-actions .btn { flex: none; padding: 8px 16px; font-size: 0.8rem; }
 
@@ -415,6 +442,16 @@ body {
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: var(--bg); border-left: 1px solid var(--dim); }
 ::-webkit-scrollbar-thumb { background: var(--fg); }
+
+/* Hide the editor's bottom-nav while the soft keyboard is open — avoids
+   relying on fragile resize/transform hacks, and gives the textarea the
+   full remaining height to scroll within. */
+#view-editor .bottom-nav {
+    transition: opacity 0.1s linear;
+}
+body[data-kb-open="true"] #view-editor .bottom-nav {
+    display: none;
+}
 
 #file-input { display: none; }
 

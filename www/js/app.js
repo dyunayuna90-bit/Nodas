@@ -59,7 +59,7 @@ const app = {
             searchClose: document.getElementById('search-close'),
             editTitle: document.getElementById('edit-title'),
             editLabels: document.getElementById('edit-labels'),
-            editContent: document.getElementById('edit-content'),
+            editContent: document.getElementById('edit-content'), // now contenteditable div
             btnPin: document.getElementById('btn-pin'),
             sysMsgContainer: document.getElementById('sys-msg-container'),
             modalOverlay: document.getElementById('modal-overlay'),
@@ -144,9 +144,6 @@ const app = {
     },
 
     setupTypingSound() {
-        // Throttle: playing a fresh oscillator on every keystroke caused
-        // perceptible input lag on lower-end devices. We now cap the
-        // type-sound to at most once every 40ms.
         let lastType = 0;
         const playType = () => {
             const now = performance.now();
@@ -157,6 +154,7 @@ const app = {
         this.els.searchInput.addEventListener('input', playType);
         this.els.editTitle.addEventListener('input', playType);
         this.els.editLabels.addEventListener('input', playType);
+        // contenteditable fires 'input' too
         this.els.editContent.addEventListener('input', playType);
     },
 
@@ -213,41 +211,36 @@ const app = {
         }
     },
 
-    // ─── KEYBOARD-AWARE LAYOUT ──────────────────────────────────────────
-    // Previous approach recalculated caret pixel position via a mirror div
-    // on every keystroke — too expensive, caused input lag and visible
-    // flicker/dimming on lower-end devices. New approach: do (almost)
-    // nothing on every keystroke. Instead, when the keyboard opens/closes
-    // we just set a CSS variable (--kb-height) once. The editor textarea
-    // is styled (in style.css) as its own scroll container that shrinks
-    // by that amount, so the BROWSER'S NATIVE caret-follow scrolling keeps
-    // the cursor visible above the keyboard automatically — exactly like
-    // typing in a normal text field.
+    // ─── KEYBOARD-AWARE EDITOR LAYOUT ─────────────────────────────────
+    // Uses window.visualViewport (same approach as the reference app).
+    // The #view-editor div is position:fixed with height = visualViewport.height
+    // and top = visualViewport.offsetTop, so the container always fills
+    // exactly the visible area above the keyboard.
+    // The format toolbar is flex-shrink:0 at the bottom of this container,
+    // so it naturally sits right on top of the keyboard at all times.
     setupKeyboardScroll() {
-        this.keyboardHeight = 0;
+        const editorEl = document.getElementById('view-editor');
+        if (!editorEl) return;
 
-        const setKbHeight = (height) => {
-            this.keyboardHeight = height || 0;
-            document.documentElement.style.setProperty('--kb-height', this.keyboardHeight + 'px');
-            document.body.setAttribute('data-kb-open', this.keyboardHeight > 0 ? 'true' : 'false');
+        const applyViewport = () => {
+            if (!editorEl.classList.contains('active')) return;
+            const vv = window.visualViewport;
+            if (vv) {
+                editorEl.style.height = vv.height + 'px';
+                editorEl.style.top = vv.offsetTop + 'px';
+            } else {
+                editorEl.style.height = window.innerHeight + 'px';
+                editorEl.style.top = '0px';
+            }
         };
 
-        if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Keyboard) {
-            const Keyboard = window.Capacitor.Plugins.Keyboard;
-            Keyboard.addListener('keyboardWillShow', (info) => {
-                setKbHeight(info && info.keyboardHeight);
-            });
-            Keyboard.addListener('keyboardWillHide', () => setKbHeight(0));
-        }
+        this._applyEditorViewport = applyViewport;
 
-        // Fallback for plain browser/PWA testing.
         if (window.visualViewport) {
-            const initialH = window.visualViewport.height;
-            window.visualViewport.addEventListener('resize', () => {
-                const diff = initialH - window.visualViewport.height;
-                setKbHeight(diff > 80 ? diff : 0);
-            });
+            window.visualViewport.addEventListener('resize', applyViewport);
+            window.visualViewport.addEventListener('scroll', applyViewport);
         }
+        window.addEventListener('resize', applyViewport);
     },
 
     setupDeleteModal() {
@@ -466,13 +459,14 @@ const app = {
         if (this._skipAutoSave) { this._skipAutoSave = false; return; }
 
         const title = this.els.editTitle.value.trim();
-        const content = this.els.editContent.value.trim();
+        const content = this.els.editContent.innerHTML.trim();
+        const contentText = this.els.editContent.innerText.trim();
         const labels = this.els.editLabels.value.trim()
             ? this.els.editLabels.value.trim().split(',').map(l => l.trim()).filter(l => l)
             : [];
         const isPinned = this.els.btnPin.innerText === this.t('btnUnpin');
 
-        if (!title && !content) return; // nothing to save
+        if (!title && !contentText) return; // nothing to save
 
         if (this.currentNoteId) {
             const idx = this.notes.findIndex(n => n.id === this.currentNoteId);
@@ -507,10 +501,12 @@ const app = {
 
         if (viewId === 'list') {
             this.renderNotes();
-            // Do NOT auto-focus search anymore — bar starts inert until tapped.
         } else if (viewId === 'timeline') {
             this.renderTimeline();
         } else if (viewId === 'editor') {
+            // Apply viewport sizing immediately so editor fills the correct
+            // area from the moment it becomes visible (before keyboard opens).
+            if (this._applyEditorViewport) this._applyEditorViewport();
             this.els.editContent.focus();
         }
     },
@@ -520,11 +516,15 @@ const app = {
 
         let filteredNotes = this.notes;
         if (this.searchQuery) {
-            filteredNotes = this.notes.filter(n =>
-                (n.title && n.title.toLowerCase().includes(this.searchQuery)) ||
-                (n.content && n.content.toLowerCase().includes(this.searchQuery)) ||
-                n.labels.some(l => l.toLowerCase().includes(this.searchQuery))
-            );
+            filteredNotes = this.notes.filter(n => {
+                // Strip HTML tags for plain-text search
+                const plainContent = (n.content || '').replace(/<[^>]*>/g, ' ');
+                return (
+                    (n.title && n.title.toLowerCase().includes(this.searchQuery)) ||
+                    (plainContent && plainContent.toLowerCase().includes(this.searchQuery)) ||
+                    n.labels.some(l => l.toLowerCase().includes(this.searchQuery))
+                );
+            });
         }
 
         const sortedNotes = [...filteredNotes].sort((a, b) => {
@@ -599,7 +599,7 @@ const app = {
         this.currentNoteId = null;
         this.els.editTitle.value = '';
         this.els.editLabels.value = '';
-        this.els.editContent.value = '';
+        this.els.editContent.innerHTML = '';
         this.els.btnPin.innerText = this.t('btnPin');
         this.navigate('editor');
     },
@@ -610,7 +610,8 @@ const app = {
         this.currentNoteId = id;
         this.els.editTitle.value = note.title;
         this.els.editLabels.value = note.labels.join(', ');
-        this.els.editContent.value = note.content;
+        // content is stored as HTML (from contenteditable)
+        this.els.editContent.innerHTML = note.content || '';
         this.els.btnPin.innerText = note.pinned ? this.t('btnUnpin') : this.t('btnPin');
         this.logActivity('open', note.id, note.title);
         this.navigate('editor');
@@ -618,13 +619,13 @@ const app = {
 
     saveNote() {
         const title = this.els.editTitle.value.trim();
-        const content = this.els.editContent.value.trim();
+        const content = this.els.editContent.innerHTML.trim();
+        const contentText = this.els.editContent.innerText.trim();
         const labels = this.els.editLabels.value.trim() ? this.els.editLabels.value.trim().split(',').map(l => l.trim()).filter(l => l) : [];
 
-        if (!title && !content) { this.goBack(); return; }
+        if (!title && !contentText) { this.goBack(); return; }
 
         const isPinned = this.els.btnPin.innerText === this.t('btnUnpin');
-
 
         if (this.currentNoteId) {
             const idx = this.notes.findIndex(n => n.id === this.currentNoteId);
@@ -724,6 +725,27 @@ const app = {
             this.renderNotes();
             this.renderTimeline();
         }
+    },
+
+    // ─── RICH TEXT FORMATTING ──────────────────────────────────────────
+    // Called by the toolbar buttons. Restores focus to the contenteditable
+    // first so execCommand operates on the correct selection.
+    formatDoc(cmd, val) {
+        this.els.editContent.focus();
+        // When applying formatBlock (H1/H2/Normal), we need a slight delay
+        // on some mobile browsers for focus to register before execCommand.
+        setTimeout(() => {
+            if (cmd === 'formatBlock') {
+                // If already the same block type, revert to paragraph
+                const current = document.queryCommandValue('formatBlock');
+                document.execCommand('formatBlock', false, current === val ? 'p' : val);
+            } else if (cmd === 'fontSize') {
+                document.execCommand('removeFormat', false, null);
+                document.execCommand('formatBlock', false, 'p');
+            } else {
+                document.execCommand(cmd, false, val || null);
+            }
+        }, 0);
     },
 
     exportData() {

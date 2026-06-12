@@ -35,9 +35,6 @@
 
         <!-- VIEW: LIST (HOME) -->
         <main id="view-list" class="view">
-            <!-- SEARCH BAR: inert until tapped. Tapping activates input,
-                 shows close button, and registers a history state so the
-                 hardware back button closes it again. -->
             <div class="cli-prompt" id="search-prompt">
                 <span>root@nodas:~$</span> grep
                 <input type="text" id="search-input" class="cli-input" placeholder="search data...">
@@ -48,7 +45,6 @@
                 <span id="txt-total-items">Matches: 0</span>
             </div>
             <ul class="note-list" id="notes-container"></ul>
-
             <div class="bottom-nav">
                 <button class="btn primary" id="btn-insert" onclick="app.newNote()">[ + ADD ]</button>
                 <button class="btn" id="btn-timeline" onclick="app.navigate('timeline')">[ LOGS ]</button>
@@ -61,11 +57,46 @@
             <div class="cli-prompt" style="cursor:default;">
                 <span>root@nodas:~$</span> tail -f /var/log/notes.log
             </div>
-            <div class="log-container" id="timeline-container">
-                <!-- Logs injected here -->
-            </div>
+            <div class="log-container" id="timeline-container"></div>
             <div class="bottom-nav">
                 <button class="btn primary" onclick="app.goBack()">[ RETURN ]</button>
+            </div>
+        </main>
+
+        <!-- VIEW: EDITOR
+             Layout: flex column, full height.
+             - .editor-header   : flex-shrink:0  (title + labels)
+             - .editor-actions  : flex-shrink:0  (pin / delete)
+             - #edit-content    : flex:1, overflow-y:auto  ← textarea scrolls here
+             - .bottom-nav      : flex-shrink:0, position STATIC inside flex
+             
+             Keyboard avoidance strategy for Capacitor Android:
+             We set  --kb-height  via the Capacitor Keyboard plugin events
+             (keyboardWillShow / keyboardWillHide).  The textarea gets
+             padding-bottom = var(--kb-height) so its scroll area shrinks
+             exactly by the keyboard height, and the browser's native
+             "scroll caret into view" does the rest — no JS per-keystroke.
+             The bottom-nav also shifts up by var(--kb-height) via margin-bottom.
+        -->
+        <main id="view-editor" class="view">
+            <div class="editor-header">
+                <div class="input-group">
+                    <label id="lbl-filename">FILE_NAME.txt (Title)</label>
+                    <input type="text" id="edit-title" class="editor-input" placeholder="Untitled">
+                </div>
+                <div class="input-group">
+                    <label id="lbl-labels">LABELS (comma separated)</label>
+                    <input type="text" id="edit-labels" class="editor-input" placeholder="e.g. work, ideas">
+                </div>
+            </div>
+            <div class="editor-actions">
+                <button class="btn" id="btn-pin" onclick="app.togglePin()">[*] PIN</button>
+                <button class="btn danger" id="btn-delete" onclick="app.deleteCurrentNote()">[X] DELETE</button>
+            </div>
+            <textarea id="edit-content" class="editor-textarea" placeholder="Input stream..."></textarea>
+            <div class="bottom-nav editor-bottom-nav">
+                <button class="btn primary" id="btn-save" onclick="app.saveNote()">[ WRITE & EXIT ]</button>
+                <button class="btn" id="btn-abort" onclick="app.abortEdit()">[ ABORT ]</button>
             </div>
         </main>
 
@@ -104,54 +135,5 @@
 
     <script src="js/config.js"></script>
     <script src="js/app.js"></script>
-
-    <!-- EDITOR OVERLAY — lives outside #screen-container so position:fixed
-         is not trapped by the container's overflow:hidden or filter effects.
-         JS visualViewport resizes it dynamically so toolbar stays above keyboard. -->
-    <div id="view-editor" class="view">
-        <div class="editor-header" id="editor-header">
-            <div class="input-group">
-                <label id="lbl-filename">FILE_NAME.txt (Title)</label>
-                <input type="text" id="edit-title" class="editor-input" placeholder="Untitled">
-            </div>
-            <div class="input-group">
-                <label id="lbl-labels">LABELS (comma separated)</label>
-                <input type="text" id="edit-labels" class="editor-input" placeholder="e.g. work, ideas">
-            </div>
-            <div class="editor-actions-inline">
-                <button class="btn-sm" id="btn-pin" onclick="app.togglePin()">[*] PIN</button>
-                <button class="btn-sm danger" id="btn-delete" onclick="app.deleteCurrentNote()">[X] DEL</button>
-                <button class="btn-sm primary" id="btn-save" onclick="app.saveNote()">[ SAVE ]</button>
-                <button class="btn-sm" id="btn-abort" onclick="app.abortEdit()">[ ABORT ]</button>
-            </div>
-        </div>
-
-        <!-- Scrollable content area -->
-        <div id="editor-scroll" class="editor-scroll">
-            <div
-                id="edit-content"
-                class="editor-contenteditable"
-                contenteditable="true"
-                spellcheck="false"
-                autocorrect="off"
-                autocapitalize="sentences"
-                data-placeholder="Input stream..."
-            ></div>
-        </div>
-
-        <!-- Format Toolbar — always above keyboard -->
-        <div id="editor-toolbar" class="editor-toolbar">
-            <button class="tb-btn" onclick="app.formatDoc('fontSize', '3')" title="Normal">A</button>
-            <button class="tb-btn tb-h2" onclick="app.formatDoc('formatBlock', 'h2')" title="H2">H2</button>
-            <button class="tb-btn tb-h1" onclick="app.formatDoc('formatBlock', 'h1')" title="H1">H1</button>
-            <div class="tb-sep"></div>
-            <button class="tb-btn" onclick="app.formatDoc('justifyLeft')" title="Left">&#8676;</button>
-            <button class="tb-btn" onclick="app.formatDoc('justifyCenter')" title="Center">&#8596;</button>
-            <button class="tb-btn" onclick="app.formatDoc('justifyRight')" title="Right">&#8677;</button>
-            <div class="tb-sep"></div>
-            <button class="tb-btn" onclick="document.execCommand('undo')" title="Undo">&#8630;</button>
-            <button class="tb-btn" onclick="document.execCommand('redo')" title="Redo">&#8631;</button>
-        </div>
-    </div>
 </body>
 </html>

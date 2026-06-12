@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Nodas - Pure Logic Terminal</title>
+    <meta name="theme-color" content="#0a0a0a">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="screen-container">
+        <div class="scanlines"></div>
+        <div class="screen-glow"></div>
+        <div id="boot-screen"></div>
+        <div id="sys-msg-container"></div>
+
+        <header class="sys-header" onclick="app.playTone('click')">
+            <div class="title">NODAS_KERNEL <span id="mode-indicator">[LGT]</span></div>
+            <div class="bits" id="bit-anim">01010101</div>
+        </header>
+
+        <!-- VIEW: LIST (HOME) -->
+        <main id="view-list" class="view">
+            <!-- SEARCH BAR: inert until tapped. Tapping activates input,
+                 shows close button, and registers a history state so the
+                 hardware back button closes it again. -->
+            <div class="cli-prompt" id="search-prompt">
+                <span>root@nodas:~$</span> grep
+                <input type="text" id="search-input" class="cli-input" placeholder="search data...">
+                <span class="cli-hint" id="search-hint">tap to grep...</span>
+                <span class="cli-close" id="search-close">[X]</span>
+            </div>
+            <div style="padding: 4px 16px; font-size:0.7rem; color:var(--dim); border-bottom: 1px solid var(--border);">
+                <span id="txt-total-items">Matches: 0</span>
+            </div>
+            <ul class="note-list" id="notes-container"></ul>
+
+            <div class="bottom-nav">
+                <button class="btn primary" id="btn-insert" onclick="app.newNote()">[ + ADD ]</button>
+                <button class="btn" id="btn-timeline" onclick="app.navigate('timeline')">[ LOGS ]</button>
+                <button class="btn" id="btn-config" onclick="app.navigate('settings')">[ CFG ]</button>
+            </div>
+        </main>
+
+        <!-- VIEW: TIMELINE (LOGS) -->
+        <main id="view-timeline" class="view">
+            <div class="cli-prompt" style="cursor:default;">
+                <span>root@nodas:~$</span> tail -f /var/log/notes.log
+            </div>
+            <div class="log-container" id="timeline-container">
+                <!-- Logs injected here -->
+            </div>
+            <div class="bottom-nav">
+                <button class="btn primary" onclick="app.goBack()">[ RETURN ]</button>
+            </div>
+        </main>
+
+        <!-- VIEW: EDITOR -->
+        <main id="view-editor" class="view">
+            <div class="editor-header">
+                <div class="input-group">
+                    <label id="lbl-filename">FILE_NAME.txt (Title)</label>
+                    <input type="text" id="edit-title" class="editor-input" placeholder="Untitled">
+                </div>
+                <div class="input-group">
+                    <label id="lbl-labels">LABELS (comma separated)</label>
+                    <input type="text" id="edit-labels" class="editor-input" placeholder="e.g. work, ideas">
+                </div>
+            </div>
+            <div class="editor-actions">
+                <button class="btn" id="btn-pin" onclick="app.togglePin()">[*] PIN</button>
+                <button class="btn danger" id="btn-delete" onclick="app.deleteCurrentNote()">[X] DELETE</button>
+            </div>
+            <textarea id="edit-content" class="editor-textarea" placeholder="Input stream..."></textarea>
+
+            <div class="bottom-nav">
+                <button class="btn primary" id="btn-save" onclick="app.saveNote()">[ WRITE & EXIT ]</button>
+                <button class="btn" id="btn-abort" onclick="app.goBack()">[ ABORT ]</button>
+            </div>
+        </main>
+
+        <!-- VIEW: SETTINGS -->
+        <main id="view-settings" class="view">
+            <div class="cli-prompt" style="cursor:default;">
+                <span>root@nodas:~$</span> ./config.sh
+            </div>
+            <div class="settings-container">
+                <div class="settings-block">
+                    <h3 id="hd-display">DISPLAY & LANG</h3>
+                    <p id="desc-display">Change terminal phosphor and machine dialect.</p>
+                    <div style="display:flex; gap:10px;">
+                        <button class="btn" onclick="app.toggleTheme()">THEME</button>
+                        <button class="btn" id="btn-lang" onclick="app.toggleLanguage()">LANG: EN</button>
+                    </div>
+                </div>
+                <div class="settings-block">
+                    <h3 id="hd-audio">AUDIO SYSTEM</h3>
+                    <button class="btn" id="btn-audio" onclick="app.toggleAudio()">AUDIO: ON</button>
+                </div>
+                <div class="settings-block">
+                    <h3 id="hd-data">DATA I/O</h3>
+                    <div style="display:flex; gap:10px;">
+                        <button class="btn primary" id="btn-export" onclick="app.exportData()">DUMP</button>
+                        <button class="btn danger" id="btn-import" onclick="document.getElementById('file-input').click()">LOAD</button>
+                        <input type="file" id="file-input" accept=".json" onchange="app.importData(event)">
+                    </div>
+                </div>
+            </div>
+            <div class="bottom-nav">
+                <button class="btn primary" id="btn-return" onclick="app.goBack()">[ RETURN ]</button>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

@@ -59,7 +59,7 @@ const app = {
             searchClose: document.getElementById('search-close'),
             editTitle: document.getElementById('edit-title'),
             editLabels: document.getElementById('edit-labels'),
-            editContent: document.getElementById('edit-content'), // now contenteditable div
+            editContent: document.getElementById('edit-content'),
             btnPin: document.getElementById('btn-pin'),
             sysMsgContainer: document.getElementById('sys-msg-container'),
             modalOverlay: document.getElementById('modal-overlay'),
@@ -144,6 +144,9 @@ const app = {
     },
 
     setupTypingSound() {
+        // Throttle: playing a fresh oscillator on every keystroke caused
+        // perceptible input lag on lower-end devices. We now cap the
+        // type-sound to at most once every 40ms.
         let lastType = 0;
         const playType = () => {
             const now = performance.now();
@@ -154,7 +157,6 @@ const app = {
         this.els.searchInput.addEventListener('input', playType);
         this.els.editTitle.addEventListener('input', playType);
         this.els.editLabels.addEventListener('input', playType);
-        // contenteditable fires 'input' too
         this.els.editContent.addEventListener('input', playType);
     },
 
@@ -211,37 +213,13 @@ const app = {
         }
     },
 
-    // ─── KEYBOARD-AWARE EDITOR LAYOUT ─────────────────────────────────
-    // Uses window.visualViewport (same approach as the reference app).
-    // The #view-editor div is position:fixed with height = visualViewport.height
-    // and top = visualViewport.offsetTop, so the container always fills
-    // exactly the visible area above the keyboard.
-    // The format toolbar is flex-shrink:0 at the bottom of this container,
-    // so it naturally sits right on top of the keyboard at all times.
+    // ─── KEYBOARD-AWARE LAYOUT ──────────────────────────────────────────
+    // capacitor.config.json: Keyboard.resize = "native"
+    // → OS mengecilkan WebView saat keyboard muncul, persis seperti browser.
+    // → position:fixed .bottom-nav otomatis naik, textarea flex:1 otomatis mengecil.
+    // → Tidak perlu JS apapun. Fungsi ini sengaja dibiarkan kosong.
     setupKeyboardScroll() {
-        const editorEl = document.getElementById('view-editor');
-        if (!editorEl) return;
-
-        const applyViewport = () => {
-            const vv = window.visualViewport;
-            if (vv) {
-                editorEl.style.height = vv.height + 'px';
-                editorEl.style.top = vv.offsetTop + 'px';
-            } else {
-                editorEl.style.height = window.innerHeight + 'px';
-                editorEl.style.top = '0px';
-            }
-        };
-
-        this._applyEditorViewport = applyViewport;
-
-        if (window.visualViewport) {
-            window.visualViewport.addEventListener('resize', applyViewport);
-            window.visualViewport.addEventListener('scroll', applyViewport);
-        }
-        window.addEventListener('resize', applyViewport);
-        // Run once immediately so size is correct on first open
-        applyViewport();
+        // intentionally empty — handled by Capacitor resize:"native"
     },
 
     setupDeleteModal() {
@@ -460,14 +438,13 @@ const app = {
         if (this._skipAutoSave) { this._skipAutoSave = false; return; }
 
         const title = this.els.editTitle.value.trim();
-        const content = this.els.editContent.innerHTML.trim();
-        const contentText = this.els.editContent.innerText.trim();
+        const content = this.els.editContent.value.trim();
         const labels = this.els.editLabels.value.trim()
             ? this.els.editLabels.value.trim().split(',').map(l => l.trim()).filter(l => l)
             : [];
         const isPinned = this.els.btnPin.innerText === this.t('btnUnpin');
 
-        if (!title && !contentText) return; // nothing to save
+        if (!title && !content) return; // nothing to save
 
         if (this.currentNoteId) {
             const idx = this.notes.findIndex(n => n.id === this.currentNoteId);
@@ -494,29 +471,19 @@ const app = {
     showView(viewId) {
         if(!this.booted) return;
 
-        const editorEl = document.getElementById('view-editor');
-
-        if (viewId === 'editor') {
-            // Editor lives outside #screen-container — hide regular views,
-            // show the editor overlay, then size it to the visible viewport.
-            this.els.views.forEach(v => v.classList.remove('active'));
-            editorEl.classList.add('active');
-            if (this._applyEditorViewport) this._applyEditorViewport();
-            this.screenRedraw();
-            setTimeout(() => this.els.editContent.focus(), 50);
-            return;
-        }
-
-        // Leaving editor or switching to another view
-        editorEl.classList.remove('active');
+        // INSTANT REDRAW LOGIC
         this.els.views.forEach(v => v.classList.remove('active'));
         document.getElementById(`view-${viewId}`).classList.add('active');
-        this.screenRedraw();
+
+        this.screenRedraw(); // Brief CRT flicker on switch
 
         if (viewId === 'list') {
             this.renderNotes();
+            // Do NOT auto-focus search anymore — bar starts inert until tapped.
         } else if (viewId === 'timeline') {
             this.renderTimeline();
+        } else if (viewId === 'editor') {
+            this.els.editContent.focus();
         }
     },
 
@@ -525,15 +492,11 @@ const app = {
 
         let filteredNotes = this.notes;
         if (this.searchQuery) {
-            filteredNotes = this.notes.filter(n => {
-                // Strip HTML tags for plain-text search
-                const plainContent = (n.content || '').replace(/<[^>]*>/g, ' ');
-                return (
-                    (n.title && n.title.toLowerCase().includes(this.searchQuery)) ||
-                    (plainContent && plainContent.toLowerCase().includes(this.searchQuery)) ||
-                    n.labels.some(l => l.toLowerCase().includes(this.searchQuery))
-                );
-            });
+            filteredNotes = this.notes.filter(n =>
+                (n.title && n.title.toLowerCase().includes(this.searchQuery)) ||
+                (n.content && n.content.toLowerCase().includes(this.searchQuery)) ||
+                n.labels.some(l => l.toLowerCase().includes(this.searchQuery))
+            );
         }
 
         const sortedNotes = [...filteredNotes].sort((a, b) => {
@@ -608,7 +571,7 @@ const app = {
         this.currentNoteId = null;
         this.els.editTitle.value = '';
         this.els.editLabels.value = '';
-        this.els.editContent.innerHTML = '';
+        this.els.editContent.value = '';
         this.els.btnPin.innerText = this.t('btnPin');
         this.navigate('editor');
     },
@@ -619,8 +582,7 @@ const app = {
         this.currentNoteId = id;
         this.els.editTitle.value = note.title;
         this.els.editLabels.value = note.labels.join(', ');
-        // content is stored as HTML (from contenteditable)
-        this.els.editContent.innerHTML = note.content || '';
+        this.els.editContent.value = note.content;
         this.els.btnPin.innerText = note.pinned ? this.t('btnUnpin') : this.t('btnPin');
         this.logActivity('open', note.id, note.title);
         this.navigate('editor');
@@ -628,13 +590,13 @@ const app = {
 
     saveNote() {
         const title = this.els.editTitle.value.trim();
-        const content = this.els.editContent.innerHTML.trim();
-        const contentText = this.els.editContent.innerText.trim();
+        const content = this.els.editContent.value.trim();
         const labels = this.els.editLabels.value.trim() ? this.els.editLabels.value.trim().split(',').map(l => l.trim()).filter(l => l) : [];
 
-        if (!title && !contentText) { this.goBack(); return; }
+        if (!title && !content) { this.goBack(); return; }
 
         const isPinned = this.els.btnPin.innerText === this.t('btnUnpin');
+
 
         if (this.currentNoteId) {
             const idx = this.notes.findIndex(n => n.id === this.currentNoteId);
@@ -734,27 +696,6 @@ const app = {
             this.renderNotes();
             this.renderTimeline();
         }
-    },
-
-    // ─── RICH TEXT FORMATTING ──────────────────────────────────────────
-    // Called by the toolbar buttons. Restores focus to the contenteditable
-    // first so execCommand operates on the correct selection.
-    formatDoc(cmd, val) {
-        this.els.editContent.focus();
-        // When applying formatBlock (H1/H2/Normal), we need a slight delay
-        // on some mobile browsers for focus to register before execCommand.
-        setTimeout(() => {
-            if (cmd === 'formatBlock') {
-                // If already the same block type, revert to paragraph
-                const current = document.queryCommandValue('formatBlock');
-                document.execCommand('formatBlock', false, current === val ? 'p' : val);
-            } else if (cmd === 'fontSize') {
-                document.execCommand('removeFormat', false, null);
-                document.execCommand('formatBlock', false, 'p');
-            } else {
-                document.execCommand(cmd, false, val || null);
-            }
-        }, 0);
     },
 
     exportData() {
